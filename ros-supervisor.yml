@@ -1,0 +1,7 @@
+services:
+  talker:
+    repo: 
+      - master-https://github.com/dkhoanguyen/simple_ros_docker_test
+  listener:
+    repo:
+      - master-https://github.com/dkhoanguyen/simple_ros_docker_test
