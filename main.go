@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/dkhoanguyen/ros-supervisor/models/compose"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -112,14 +113,25 @@ func print(rd io.Reader) error {
 }
 
 func main() {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		panic(err)
+	project := compose.CreateProject("docker-compose.yml", "/home/khoa/research/code/github/ros_docker/")
+	for _, service := range project.Services {
+		fmt.Printf("Service Name: %s\n", service.Name)
+		fmt.Printf("Build Context: %s\n", service.BuildOpt.Context)
+		fmt.Printf("Build Dockerfile: %s\n", service.BuildOpt.Dockerfile)
+		fmt.Printf("Build ContainerName: %s\n", service.ContainerName)
+		fmt.Printf("Depends On: %s\n", service.DependsOn)
+		fmt.Printf("Networks Name: %s\n", service.Networks[0].Name)
+		fmt.Printf("Networks Name: %s\n", service.Networks[0].IPv4)
+		fmt.Printf("=====\n")
 	}
+	// cli, err := client.NewClientWithOpts(client.FromEnv)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	imageBuild(cli)
+	// imageBuild(cli)
 
-	StartContainer(cli)
+	// StartContainer(cli)
 
 	// containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	// if err != nil {

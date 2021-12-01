@@ -8,7 +8,7 @@ type Service struct {
 	CgroupParent  []string
 	Command       ShellCommand
 	ContainerName string
-	DependsOn     map[string]string
+	DependsOn     []string
 	Devices       []string
 	EntryPoint    ShellCommand
 	Environment   []string
@@ -28,7 +28,7 @@ type Service struct {
 type ServiceBuild struct {
 	Context    string
 	Dockerfile string
-	Arges      map[string]*string
+	Args       map[string]*string
 }
 
 type ServiceNetwork struct {
@@ -48,3 +48,10 @@ const (
 	RestartNoRetry       = "no"
 	RestartUnlessStopped = "unless-stopped"
 )
+
+func GetBuildConfig(rawBuildConfig map[string]interface{}) ServiceBuild {
+	return ServiceBuild{
+		Context:    rawBuildConfig["context"].(string),
+		Dockerfile: rawBuildConfig["dockerfile"].(string),
+	}
+}

@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 
@@ -33,9 +34,9 @@ func (project Project) NetworkNames() []string {
 	return names
 }
 
-func CreateProject(path string) Project {
+func CreateProject(dockerComposePath, projectPath string) Project {
 	outputProject := Project{}
-	yamlFile, err := ioutil.ReadFile(path)
+	yamlFile, err := ioutil.ReadFile(dockerComposePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,18 +45,55 @@ func CreateProject(path string) Project {
 	if err2 != nil {
 		log.Fatal(err2)
 	}
-	outputProject.Services = extractServices(rawData)
+	outputProject.Services = extractServices(rawData, projectPath)
 	outputProject.Networks = extractNetworks(rawData)
 	outputProject.Volumes = extractVolumes(rawData)
+
+	return outputProject
 }
 
-func extractServices(rawData map[interface{}]interface{}) docker.Services {
+func extractServices(rawData map[interface{}]interface{}, projectPath string) docker.Services {
 	outputServices := docker.Services{}
 	rawServices := rawData["services"].(map[string]interface{})
-	for serviceName, _ := range rawServices {
+	for serviceName, serviceConfig := range rawServices {
 		dService := docker.Service{}
+
+		// Service name
 		dService.Name = serviceName
-		dService.Config.Name = serviceName
+
+		// Build options and setups
+		buildOpt := serviceConfig.(map[string]interface{})["build"].(map[string]interface{})
+		dService.BuildOpt.Context = buildOpt["context"].(string)
+		dService.BuildOpt.Dockerfile = projectPath + buildOpt["dockerfile"].(string)
+
+		// Container name
+		dService.ContainerName = serviceConfig.(map[string]interface{})["container_name"].(string)
+
+		// Depends On
+		if dependsOn, ok := serviceConfig.(map[string]interface{})["depends_on"].([]interface{}); ok {
+			for _, dp := range dependsOn {
+				// fmt.Printf("%s\n", dp.(string))
+				dService.DependsOn = append(dService.DependsOn, dp.(string))
+			}
+		}
+
+		// Networks
+		if networkOpts, ok := serviceConfig.(map[string]interface{})["networks"].(map[string]interface{}); ok {
+			for name, network := range networkOpts {
+				// fmt.Printf("%s:%s\n", name, network.(map[string]interface{})["ipv4_address"].(string))
+				dService.Networks = append(dService.Networks, docker.ServiceNetwork{
+					Name: name,
+					IPv4: network.(map[string]interface{})["ipv4_address"].(string),
+				})
+			}
+		}
+
+		if volumeOpts, ok := serviceConfig.(map[string]interface{})["volumes"].([]interface{}); ok {
+			for _, volume := range volumeOpts {
+				fmt.Printf("%s\n", volume.(string))
+			}
+		}
+
 		outputServices = append(outputServices, dService)
 	}
 
@@ -64,12 +102,13 @@ func extractServices(rawData map[interface{}]interface{}) docker.Services {
 
 func extractNetworks(rawData map[interface{}]interface{}) docker.Networks {
 	outputNetworks := docker.Networks{}
-	rawNetworks := rawData["networks"].(map[string]interface{})
 
-	for networkName, _ := range rawNetworks {
-		dNetwork := docker.Network{}
-		dNetwork.Name = networkName
-		outputNetworks = append(outputNetworks, dNetwork)
+	if rawNetworks, ok := rawData["networks"].(map[string]interface{}); ok {
+		for networkName, _ := range rawNetworks {
+			dNetwork := docker.Network{}
+			dNetwork.Name = networkName
+			outputNetworks = append(outputNetworks, dNetwork)
+		}
 	}
 
 	return outputNetworks
@@ -77,13 +116,12 @@ func extractNetworks(rawData map[interface{}]interface{}) docker.Networks {
 
 func extractVolumes(rawData map[interface{}]interface{}) docker.Volumes {
 	outputVolumes := docker.Volumes{}
-	rawVolumes := rawData["volumes"].(map[string]interface{})
-
-	for volumeName, _ := range rawVolumes {
-		dVolume := docker.Volume{}
-		dVolume.Name = volumeName
-		outputVolumes = append(outputVolumes, dVolume)
+	if rawVolumes, ok := rawData["volumes"].(map[string]interface{}); ok {
+		for volumeName, _ := range rawVolumes {
+			dVolume := docker.Volume{}
+			dVolume.Name = volumeName
+			outputVolumes = append(outputVolumes, dVolume)
+		}
 	}
-
 	return outputVolumes
 }
