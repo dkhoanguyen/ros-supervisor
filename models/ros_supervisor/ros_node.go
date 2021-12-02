@@ -1,4 +1,4 @@
-package models
+package ros_supervisor
 
 type RosNode struct {
 	Name     string `json:"name"`

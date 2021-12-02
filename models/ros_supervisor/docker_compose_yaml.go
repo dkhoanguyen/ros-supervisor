@@ -1,4 +1,4 @@
-package models
+package ros_supervisor
 
 type DCService struct {
 	Name    string

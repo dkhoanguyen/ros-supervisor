@@ -4,39 +4,43 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
+	dc "github.com/dkhoanguyen/ros-supervisor/cmd/compose"
 	"github.com/dkhoanguyen/ros-supervisor/models/compose"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/pkg/errors"
 )
 
-func imageBuild(dockerClient *client.Client) error {
+func imageBuild(dockerClient *client.Client, project compose.Project) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
 	defer cancel()
 
-	tar, err := archive.TarWithOptions(".", &archive.TarOptions{})
+	tar, err := archive.TarWithOptions(project.Services[0].BuildOpt.Context, &archive.TarOptions{})
 	if err != nil {
 		return err
 	}
 
+	buildCtx, _ := compress(tar)
 	opts := types.ImageBuildOptions{
-		Dockerfile: "Dockerfile",
-		Tags:       []string{"latest"},
+		Dockerfile: project.Services[0].BuildOpt.Dockerfile,
+		Tags:       []string{"core:v0.0.1"},
 		Remove:     true,
 		NoCache:    true,
 	}
-	res, err := dockerClient.ImageBuild(ctx, tar, opts)
+	res, err := dockerClient.ImageBuild(ctx, buildCtx, opts)
 	if err != nil {
 		fmt.Printf("Test111\n")
-		return err
+		panic(err)
+		// return err
 	}
 	fmt.Printf("Test2222\n")
 
@@ -45,6 +49,30 @@ func imageBuild(dockerClient *client.Client) error {
 	err = print(res.Body)
 
 	return nil
+}
+
+// Compress the build context for sending to the API
+func compress(buildCtx io.ReadCloser) (io.ReadCloser, error) {
+	pipeReader, pipeWriter := io.Pipe()
+
+	go func() {
+		compressWriter, err := archive.CompressStream(pipeWriter, archive.Gzip)
+		if err != nil {
+			pipeWriter.CloseWithError(err)
+		}
+		defer buildCtx.Close()
+
+		if _, err := pools.Copy(compressWriter, buildCtx); err != nil {
+			pipeWriter.CloseWithError(
+				errors.Wrap(err, "failed to compress context"))
+			compressWriter.Close()
+			return
+		}
+		compressWriter.Close()
+		pipeWriter.Close()
+	}()
+
+	return pipeReader, nil
 }
 
 func StartContainer(dockerClient *client.Client) error {
@@ -122,14 +150,19 @@ func main() {
 		fmt.Printf("Depends On: %s\n", service.DependsOn)
 		fmt.Printf("Networks Name: %s\n", service.Networks[0].Name)
 		fmt.Printf("Networks Name: %s\n", service.Networks[0].IPv4)
+		fmt.Printf("Volume Name: %s\n", service.Volumes[0].Mount)
 		fmt.Printf("=====\n")
 	}
-	// cli, err := client.NewClientWithOpts(client.FromEnv)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		panic(err)
+	}
 
-	// imageBuild(cli)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
+	defer cancel()
+
+	imageID, _ := dc.BuildSingle(ctx, cli, "ros_docker", project.Services[0])
+	fmt.Printf("Image ID: %s\n", imageID)
 
 	// StartContainer(cli)
 

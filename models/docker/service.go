@@ -39,7 +39,7 @@ type ServiceNetwork struct {
 }
 
 type ServiceVolume struct {
-	Type string
+	Mount string
 }
 
 const (

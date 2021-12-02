@@ -1,9 +1,9 @@
 package compose
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 
 	"github.com/dkhoanguyen/ros-supervisor/models/docker"
 	"gopkg.in/yaml.v3"
@@ -15,7 +15,7 @@ type Project struct {
 	Services    docker.Services `json:"services"`
 	Networks    docker.Networks `json:"networks"`
 	Volumes     docker.Volumes  `json:"volumes"`
-	ComposeFile string          `json:"compose_file"`
+	ComposeFile []byte          `json:"compose_file"`
 }
 
 func (project Project) ServiceNames() []string {
@@ -36,18 +36,25 @@ func (project Project) NetworkNames() []string {
 
 func CreateProject(dockerComposePath, projectPath string) Project {
 	outputProject := Project{}
-	yamlFile, err := ioutil.ReadFile(dockerComposePath)
+	composeFile, err := ioutil.ReadFile(dockerComposePath)
 	if err != nil {
 		log.Fatal(err)
 	}
 	rawData := make(map[interface{}]interface{})
-	err2 := yaml.Unmarshal(yamlFile, &rawData)
+	err2 := yaml.Unmarshal(composeFile, &rawData)
 	if err2 != nil {
 		log.Fatal(err2)
 	}
+	slicedProjectPath := strings.Split(projectPath, "/")
+
+	outputProject.Name = slicedProjectPath[len(slicedProjectPath)-1]
+	outputProject.WorkingDir = projectPath
+
 	outputProject.Services = extractServices(rawData, projectPath)
 	outputProject.Networks = extractNetworks(rawData)
 	outputProject.Volumes = extractVolumes(rawData)
+
+	outputProject.ComposeFile = composeFile
 
 	return outputProject
 }
@@ -63,8 +70,8 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 
 		// Build options and setups
 		buildOpt := serviceConfig.(map[string]interface{})["build"].(map[string]interface{})
-		dService.BuildOpt.Context = buildOpt["context"].(string)
-		dService.BuildOpt.Dockerfile = projectPath + buildOpt["dockerfile"].(string)
+		dService.BuildOpt.Context = projectPath
+		dService.BuildOpt.Dockerfile = buildOpt["dockerfile"].(string)
 
 		// Container name
 		dService.ContainerName = serviceConfig.(map[string]interface{})["container_name"].(string)
@@ -74,6 +81,13 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 			for _, dp := range dependsOn {
 				// fmt.Printf("%s\n", dp.(string))
 				dService.DependsOn = append(dService.DependsOn, dp.(string))
+			}
+		}
+
+		// Environment variables
+		if envVarsOpt, ok := serviceConfig.(map[string]interface{})["environment"].([]interface{}); ok {
+			for _, envVars := range envVarsOpt {
+				dService.Environment = append(dService.Environment, envVars.(string))
 			}
 		}
 
@@ -90,8 +104,13 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 
 		if volumeOpts, ok := serviceConfig.(map[string]interface{})["volumes"].([]interface{}); ok {
 			for _, volume := range volumeOpts {
-				fmt.Printf("%s\n", volume.(string))
+				// fmt.Printf("%s\n", volume.(string))
+				dService.Volumes = append(dService.Volumes, docker.ServiceVolume{
+					Mount: volume.(string),
+				})
 			}
+		} else {
+			dService.Volumes = append(dService.Volumes, docker.ServiceVolume{})
 		}
 
 		outputServices = append(outputServices, dService)
