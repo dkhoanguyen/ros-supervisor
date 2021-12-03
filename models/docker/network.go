@@ -1,20 +1,18 @@
 package docker
 
+import "github.com/docker/docker/api/types/network"
+
 type Networks []Network
 
 type Network struct {
-	Name   string `json:"name"`
-	Driver string `json:"driver"`
-	Ipam   IPAM
+	Name           string `json:"name"`
+	CheckDuplicate bool
+	Labels         Labels
+	Internal       bool
+	Attachable     bool
+	Driver         string `json:"driver"`
+	Ipam           network.IPAM
+	EnableIPv6     bool
 }
 
-type IPAM struct {
-	Driver string     `json:"driver"`
-	Config IPAMConfig `json:"config"`
-}
-
-type IPAMConfig struct {
-	Subnet  string `json:"subnet"`
-	IpRange string `json:"iprange"`
-	Gateway string
-}
+// IPAMConfig represents IPAM configuration

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/dkhoanguyen/ros-supervisor/models/docker"
+	"github.com/docker/docker/api/types/network"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,10 +18,11 @@ type Project struct {
 	Services    docker.Services `json:"services"`
 	Networks    docker.Networks `json:"networks"`
 	Volumes     docker.Volumes  `json:"volumes"`
+	Configs     docker.Configs  `json:"configs"`
 	ComposeFile []byte          `json:"compose_file"`
 }
 
-func (project Project) ServiceNames() []string {
+func (project *Project) ServiceNames() []string {
 	var names []string
 	for _, service := range project.Services {
 		names = append(names, service.Name)
@@ -28,7 +30,7 @@ func (project Project) ServiceNames() []string {
 	return names
 }
 
-func (project Project) NetworkNames() []string {
+func (project *Project) NetworkNames() []string {
 	var names []string
 	for _, network := range project.Networks {
 		names = append(names, network.Name)
@@ -74,10 +76,6 @@ func (project *Project) RestructureServices() {
 		}
 	}
 
-	for _, service := range restructureServices {
-		fmt.Printf("Service Name: %s\n", service.Name)
-	}
-
 	project.Services = restructureServices
 }
 
@@ -102,6 +100,8 @@ func CreateProject(dockerComposePath, projectPath string) Project {
 	outputProject.Volumes = extractVolumes(rawData)
 
 	outputProject.ComposeFile = composeFile
+
+	outputProject.RestructureServices()
 
 	return outputProject
 }
@@ -173,13 +173,27 @@ func extractNetworks(rawData map[interface{}]interface{}) docker.Networks {
 	outputNetworks := docker.Networks{}
 
 	if rawNetworks, ok := rawData["networks"].(map[string]interface{}); ok {
-		for networkName, _ := range rawNetworks {
+		for networkName, rawNetwork := range rawNetworks {
 			dNetwork := docker.Network{}
 			dNetwork.Name = networkName
+			dNetwork.CheckDuplicate = true
+			dNetwork.EnableIPv6 = false
+			dNetwork.Internal = false
+			dNetwork.Driver = rawNetwork.(map[string]interface{})["driver"].(string)
+
+			ipam := rawNetwork.(map[string]interface{})["ipam"]
+			ipamConfig := ipam.(map[string]interface{})["config"].([]interface{})
+
+			for _, config := range ipamConfig {
+				ipamConfig := network.IPAMConfig{
+					Subnet:  config.(map[string]interface{})["subnet"].(string),
+					Gateway: config.(map[string]interface{})["gateway"].(string),
+				}
+				dNetwork.Ipam.Config = append(dNetwork.Ipam.Config, ipamConfig)
+			}
 			outputNetworks = append(outputNetworks, dNetwork)
 		}
 	}
-
 	return outputNetworks
 }
 
@@ -201,4 +215,26 @@ func extractConfig(rawData map[interface{}]interface{}) {
 
 func extractSecrets(rawData map[interface{}]interface{}) {
 
+}
+
+func DisplayProject(project *Project) {
+	for _, service := range project.Services {
+		fmt.Printf("Service Name: %s\n", service.Name)
+		fmt.Printf("Build Context: %s\n", service.BuildOpt.Context)
+		fmt.Printf("Build Dockerfile: %s\n", service.BuildOpt.Dockerfile)
+		fmt.Printf("Build ContainerName: %s\n", service.ContainerName)
+		fmt.Printf("Depends On: %s\n", service.DependsOn)
+		fmt.Printf("Networks Name: %s\n", service.Networks[0].Name)
+		fmt.Printf("Networks Name: %s\n", service.Networks[0].IPv4)
+		fmt.Printf("Volume Name: %s\n", service.Volumes[0].Mount)
+		fmt.Printf("=====\n")
+	}
+
+	for _, networks := range project.Networks {
+		fmt.Printf("Network Name: %s\n", networks.Name)
+		fmt.Printf("Network Driver: %s\n", networks.Driver)
+		fmt.Printf("Network IPAM Subnet: %s\n", networks.Ipam.Config[0].Subnet)
+		fmt.Printf("Network IPAM Gateway: %s\n", networks.Ipam.Config[0].Gateway)
+		fmt.Printf("=====\n")
+	}
 }
