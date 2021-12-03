@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	dc "github.com/dkhoanguyen/ros-supervisor/cmd/compose"
 	"github.com/dkhoanguyen/ros-supervisor/models/compose"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -142,6 +141,7 @@ func print(rd io.Reader) error {
 
 func main() {
 	project := compose.CreateProject("docker-compose.yml", "/home/khoa/research/code/github/ros_docker/")
+	project.RestructureServices()
 	for _, service := range project.Services {
 		fmt.Printf("Service Name: %s\n", service.Name)
 		fmt.Printf("Build Context: %s\n", service.BuildOpt.Context)
@@ -153,16 +153,17 @@ func main() {
 		fmt.Printf("Volume Name: %s\n", service.Volumes[0].Mount)
 		fmt.Printf("=====\n")
 	}
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		panic(err)
-	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
-	defer cancel()
+	// cli, err := client.NewClientWithOpts(client.FromEnv)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	imageID, _ := dc.BuildSingle(ctx, cli, "ros_docker", project.Services[0])
-	fmt.Printf("Image ID: %s\n", imageID)
+	// ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
+	// defer cancel()
+
+	// imageID, _ := dc.BuildSingle(ctx, cli, "ros_docker", project.Services[0])
+	// fmt.Printf("Image ID: %s\n", imageID)
 
 	// StartContainer(cli)
 

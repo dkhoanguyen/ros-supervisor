@@ -18,11 +18,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Build(ctx context.Context, dockerClient *client.Client, project compose.Project) {
+func Build(ctx context.Context, dockerClient *client.Client, project *compose.Project) {
 
 }
 
-func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName string, targetService docker.Service) (string, error) {
+func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName string, targetService *docker.Service) (string, error) {
 
 	// TODO Investigate build context as a git repo
 	buildCtx := PrepareLocalBuildContext(projectName, targetService, &archive.TarOptions{})
@@ -45,6 +45,11 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 		}
 	}
 
+	// Attach imageID to Service.Image
+	targetService.Image.ID = imageID
+	targetService.Image.Repository = projectName + "_" + targetService.Name
+	targetService.Image.Tag = "v0.0.1"
+
 	err = jsonmessage.DisplayJSONMessagesStream(response.Body, buildBuff, progBuff.Fd(), true, aux)
 	if err != nil {
 		if jerr, ok := err.(*jsonmessage.JSONError); ok {
@@ -60,7 +65,7 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 	return imageID, nil
 }
 
-func PrepareLocalBuildContext(projectName string, targetService docker.Service, archiveOpts *archive.TarOptions) io.ReadCloser {
+func PrepareLocalBuildContext(projectName string, targetService *docker.Service, archiveOpts *archive.TarOptions) io.ReadCloser {
 
 	// Initial archiving
 	archiveCtx, err := archive.TarWithOptions(targetService.BuildOpt.Context, archiveOpts)
@@ -77,9 +82,9 @@ func PrepareLocalBuildContext(projectName string, targetService docker.Service, 
 	return buildCtx
 }
 
-func PrepareImageBuildOptions(projectName string, targetService docker.Service) types.ImageBuildOptions {
+func PrepareImageBuildOptions(projectName string, targetService *docker.Service) types.ImageBuildOptions {
 	// Prepare tag
-	tag := []string{projectName + targetService.Name + ":" + "latest"}
+	tag := []string{projectName + "_" + targetService.Name + ":" + "latest"}
 	return types.ImageBuildOptions{
 		Tags:           tag,
 		SuppressOutput: false,

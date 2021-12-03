@@ -14,7 +14,7 @@ type Service struct {
 	Environment   []string
 	EnvFile       []string
 	Expose        []string
-	Image         string
+	Image         Image
 	MemLimit      int64
 	MemSwapLimit  int64
 	Networks      []ServiceNetwork

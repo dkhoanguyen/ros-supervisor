@@ -1,8 +1,10 @@
 package compose
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/dkhoanguyen/ros-supervisor/models/docker"
@@ -32,6 +34,51 @@ func (project Project) NetworkNames() []string {
 		names = append(names, network.Name)
 	}
 	return names
+}
+
+func (project Project) GetService(name string) docker.Service {
+	for _, service := range project.Services {
+		if service.Name == name {
+			return service
+		}
+	}
+	return docker.Service{}
+}
+
+// Restructure services based on dependencies
+func (project *Project) RestructureServices() {
+	restructureServices := docker.Services{}
+	numDepends := make([]int, 0)
+	numDepends = append(numDepends, 0)
+	find := func(element int, arr []int) bool {
+		for _, d := range arr {
+			if element == d {
+				return true
+			}
+		}
+		return false
+	}
+	for _, service := range project.Services {
+		if !find(len(service.DependsOn), numDepends) {
+			numDepends = append(numDepends, len(service.DependsOn))
+		}
+	}
+
+	sort.Ints(numDepends)
+
+	for _, nd := range numDepends {
+		for _, service := range project.Services {
+			if len(service.DependsOn) == nd {
+				restructureServices = append(restructureServices, service)
+			}
+		}
+	}
+
+	for _, service := range restructureServices {
+		fmt.Printf("Service Name: %s\n", service.Name)
+	}
+
+	project.Services = restructureServices
 }
 
 func CreateProject(dockerComposePath, projectPath string) Project {
@@ -82,6 +129,9 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 				// fmt.Printf("%s\n", dp.(string))
 				dService.DependsOn = append(dService.DependsOn, dp.(string))
 			}
+		} else {
+			// Crucial as this is required to sort all services based on dependencies
+			dService.DependsOn = make([]string, 0)
 		}
 
 		// Environment variables
@@ -143,4 +193,12 @@ func extractVolumes(rawData map[interface{}]interface{}) docker.Volumes {
 		}
 	}
 	return outputVolumes
+}
+
+func extractConfig(rawData map[interface{}]interface{}) {
+
+}
+
+func extractSecrets(rawData map[interface{}]interface{}) {
+
 }

@@ -6,6 +6,7 @@ services:
     build: 
       context: .
       dockerfile: images/core/Dockerfile
+    restart: always
     networks:
       ros:
         ipv4_address: 172.22.0.2
@@ -40,6 +41,7 @@ services:
       - /etc/hosts:/tmp/hosts
     depends_on:
       - core
+      - talker
     networks:
       ros:
         ipv4_address: 172.22.0.4
