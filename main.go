@@ -152,7 +152,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
 	defer cancel()
 
-	dc.CreateNetwork(ctx, &project, cli)
+	dc.CreateNetwork(ctx, &project, cli, false)
 
 	// imageID, _ := dc.BuildSingle(ctx, cli, "ros_docker", project.Services[0])
 	// fmt.Printf("Image ID: %s\n", imageID)

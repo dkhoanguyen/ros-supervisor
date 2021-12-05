@@ -47,7 +47,7 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 
 	// Attach imageID to Service.Image
 	targetService.Image.ID = imageID
-	targetService.Image.Repository = projectName + "_" + targetService.Name
+	targetService.Image.Name = projectName + "_" + targetService.Name
 	targetService.Image.Tag = "v0.0.1"
 
 	err = jsonmessage.DisplayJSONMessagesStream(response.Body, buildBuff, progBuff.Fd(), true, aux)

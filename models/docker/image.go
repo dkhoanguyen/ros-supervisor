@@ -1,10 +1,10 @@
 package docker
 
 type Image struct {
-	ID         string
-	Repository string
-	Tag        string
-	Created    string
+	ID      string
+	Name    string
+	Tag     string
+	Created string
 }
 
 type ImageContainerConfig struct {

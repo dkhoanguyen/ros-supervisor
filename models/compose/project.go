@@ -155,9 +155,18 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 		if volumeOpts, ok := serviceConfig.(map[string]interface{})["volumes"].([]interface{}); ok {
 			for _, volume := range volumeOpts {
 				// fmt.Printf("%s\n", volume.(string))
-				dService.Volumes = append(dService.Volumes, docker.ServiceVolume{
-					Mount: volume.(string),
-				})
+				fromStringToVolume := func(volStr string) docker.ServiceVolume {
+					separateValues := strings.Split(volStr, ":")
+					if len(separateValues) >= 2 {
+						return docker.ServiceVolume{
+							Type:        docker.VolumeTypeBind,
+							Source:      separateValues[0],
+							Destination: separateValues[1],
+						}
+					}
+					return docker.ServiceVolume{}
+				}
+				dService.Volumes = append(dService.Volumes, fromStringToVolume(volume.(string)))
 			}
 		} else {
 			dService.Volumes = append(dService.Volumes, docker.ServiceVolume{})
@@ -226,7 +235,6 @@ func DisplayProject(project *Project) {
 		fmt.Printf("Depends On: %s\n", service.DependsOn)
 		fmt.Printf("Networks Name: %s\n", service.Networks[0].Name)
 		fmt.Printf("Networks Name: %s\n", service.Networks[0].IPv4)
-		fmt.Printf("Volume Name: %s\n", service.Volumes[0].Mount)
 		fmt.Printf("=====\n")
 	}
 

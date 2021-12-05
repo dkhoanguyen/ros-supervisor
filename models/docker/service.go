@@ -3,26 +3,36 @@ package docker
 type Services []Service
 
 type Service struct {
-	Name          string
-	BuildOpt      ServiceBuild
-	CgroupParent  []string
-	Command       ShellCommand
-	ContainerName string
-	DependsOn     []string
-	Devices       []string
-	EntryPoint    ShellCommand
-	Environment   []string
-	EnvFile       []string
-	Expose        []string
-	Image         Image
-	MemLimit      int64
-	MemSwapLimit  int64
-	Networks      []ServiceNetwork
-	Ports         []string
-	Privileged    bool
-	Restart       string
-	Volumes       []ServiceVolume
-	WorkingDir    string
+	Name           string
+	Hostname       string
+	User           string
+	CapAdd         []string
+	CapDrop        []string
+	BuildOpt       ServiceBuild
+	CgroupParent   string
+	Command        ShellCommand
+	ContainerName  string
+	Domainname     string
+	DependsOn      []string
+	Devices        []string
+	EntryPoint     ShellCommand
+	Environment    []string
+	EnvFile        []string
+	Expose         []string
+	Image          Image
+	IpcMode        string
+	MemLimit       int64
+	MemSwapLimit   int64
+	Networks       []ServiceNetwork
+	NetworkMode    string
+	OomKillDisable bool
+	Ports          []ServicePort
+	Privileged     bool
+	Sysctls        map[string]string
+	Restart        string
+	Tty            bool
+	Volumes        []ServiceVolume
+	WorkingDir     string
 }
 
 type ServiceBuild struct {
@@ -39,8 +49,23 @@ type ServiceNetwork struct {
 }
 
 type ServiceVolume struct {
-	Mount string
+	Type        string
+	Source      string
+	Destination string
+	Option      string
 }
+
+type ServicePort struct {
+	Target   string
+	Protocol string
+	HostIp   string
+	HostPort string
+}
+
+const (
+	VolumeTypeBind  = "bind"
+	VolumeTypeMount = "mount"
+)
 
 const (
 	RestartAlways        = "always"
