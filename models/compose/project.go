@@ -92,7 +92,7 @@ func CreateProject(dockerComposePath, projectPath string) Project {
 	}
 	slicedProjectPath := strings.Split(projectPath, "/")
 
-	outputProject.Name = slicedProjectPath[len(slicedProjectPath)-1]
+	outputProject.Name = slicedProjectPath[len(slicedProjectPath)-2]
 	outputProject.WorkingDir = projectPath
 
 	outputProject.Services = extractServices(rawData, projectPath)

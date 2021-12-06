@@ -51,6 +51,7 @@ func PrepareNetworkConfig(targetService *docker.Service, targetNetwork *docker.N
 
 	endPointConfig := map[string]*network.EndpointSettings{
 		targetNetwork.Name: {
+			NetworkID: targetNetwork.ID,
 			IPAddress: targetService.Networks[0].IPv4,
 			Aliases:   aliases,
 		},
@@ -176,7 +177,11 @@ func CreateNetwork(ctx context.Context, project *compose.Project, dockerClient *
 		_, err := dockerClient.NetworkInspect(ctx, networkName, moby.NetworkInspectOptions{})
 		// Only create network if it does not exist
 		if err != nil {
-			dockerClient.NetworkCreate(ctx, networkName, networkOpts)
+			resp, err := dockerClient.NetworkCreate(ctx, networkName, networkOpts)
+			if err != nil {
+				panic(err)
+			}
+			network.ID = resp.ID
 		} else {
 			if forceRecreate {
 				// Delete old network setup and recreate them

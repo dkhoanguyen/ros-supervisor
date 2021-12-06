@@ -6,6 +6,7 @@ type Networks []Network
 
 type Network struct {
 	Name           string `json:"name"`
+	ID             string
 	CheckDuplicate bool
 	Labels         Labels
 	Internal       bool
