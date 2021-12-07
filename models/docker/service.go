@@ -20,6 +20,7 @@ type Service struct {
 	EnvFile        []string
 	Expose         []string
 	Image          Image
+	Container      Container
 	IpcMode        string
 	MemLimit       int64
 	MemSwapLimit   int64
