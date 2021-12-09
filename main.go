@@ -166,4 +166,5 @@ func main() {
 	dc.Build(ctx, cli, &project)
 	dc.CreateContainers(ctx, &project, cli)
 	dc.StartAllServiceContainer(ctx, cli, &project)
+	fmt.Print("test")
 }
