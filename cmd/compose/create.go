@@ -11,6 +11,7 @@ import (
 	moby "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -31,7 +32,6 @@ func CreateSingleContainer(ctx context.Context, projectName string, targetServic
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Printf("%+v\n", allContainers)
 	for _, cont := range allContainers {
 		for _, name := range cont.Names {
 			if name == "/"+containerName {
@@ -43,9 +43,6 @@ func CreateSingleContainer(ctx context.Context, projectName string, targetServic
 		}
 	}
 	containerConfig, networkConfig, hostConfig := PrepareContainerCreateOptions(targetService, targetNetwork)
-	// fmt.Printf("%+v\n", containerConfig.Image)
-	// fmt.Printf("%+v\n", networkConfig)
-	// fmt.Printf("%+v\n", hostConfig)
 	container, err := dockerClient.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, nil, containerName)
 	if err != nil {
 		panic(err)
@@ -71,8 +68,8 @@ func PrepareContainerConfig(targetService *docker.Service) container.Config {
 		Domainname: targetService.Domainname,
 		User:       targetService.User,
 		Tty:        targetService.Tty,
-		// Cmd:        strslice.StrSlice(targetService.Command),
-		// Entrypoint: strslice.StrSlice(targetService.EntryPoint),
+		Cmd:        strslice.StrSlice(targetService.Command),
+		Entrypoint: strslice.StrSlice(targetService.EntryPoint),
 		Image:      targetService.Image.Name,
 		WorkingDir: targetService.WorkingDir,
 		StopSignal: "SIGTERM",

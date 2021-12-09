@@ -24,11 +24,7 @@ func Build(ctx context.Context, dockerClient *client.Client, project *compose.Pr
 		if err != nil {
 			panic(err)
 		}
-		// fmt.Printf("%+v\n", service.Image.Name)
-		// fmt.Printf("%+v\n", service.Image.ID)
 	}
-	// fmt.Printf("%+v\n", project.Services[0].Image.Name)
-	// fmt.Printf("%+v\n", project.Services[0].Image.ID)
 }
 
 func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName string, targetService *docker.Service) (string, error) {
