@@ -92,7 +92,7 @@ func CreateProject(dockerComposePath, projectPath string) Project {
 	}
 	slicedProjectPath := strings.Split(projectPath, "/")
 
-	outputProject.Name = slicedProjectPath[len(slicedProjectPath)-1]
+	outputProject.Name = slicedProjectPath[len(slicedProjectPath)-2]
 	outputProject.WorkingDir = projectPath
 
 	outputProject.Services = extractServices(rawData, projectPath)
@@ -234,7 +234,10 @@ func DisplayProject(project *Project) {
 		fmt.Printf("Build ContainerName: %s\n", service.ContainerName)
 		fmt.Printf("Depends On: %s\n", service.DependsOn)
 		fmt.Printf("Networks Name: %s\n", service.Networks[0].Name)
-		fmt.Printf("Networks Name: %s\n", service.Networks[0].IPv4)
+		fmt.Printf("IPV4: %s\n", service.Networks[0].IPv4)
+		for _, env := range service.Environment {
+			fmt.Printf("Env: %s\n", env)
+		}
 		fmt.Printf("=====\n")
 	}
 

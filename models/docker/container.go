@@ -2,6 +2,11 @@ package docker
 
 import "github.com/docker/docker/api/types/container"
 
+type Container struct {
+	Name string `json:"name"`
+	ID   string
+}
+
 type ContainerConfig struct {
 	Name            string `json:"name"`
 	Hostname        string `json:"hostname"`

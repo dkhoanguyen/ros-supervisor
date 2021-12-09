@@ -19,7 +19,16 @@ import (
 )
 
 func Build(ctx context.Context, dockerClient *client.Client, project *compose.Project) {
-
+	for idx := range project.Services {
+		_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Services[idx])
+		if err != nil {
+			panic(err)
+		}
+		// fmt.Printf("%+v\n", service.Image.Name)
+		// fmt.Printf("%+v\n", service.Image.ID)
+	}
+	// fmt.Printf("%+v\n", project.Services[0].Image.Name)
+	// fmt.Printf("%+v\n", project.Services[0].Image.ID)
 }
 
 func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName string, targetService *docker.Service) (string, error) {
@@ -42,10 +51,12 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 			fmt.Fprintf(os.Stderr, "Failed to parse aux message: %s", err)
 		} else {
 			imageID = result.ID
+			targetService.Image.ID = imageID[7:]
 		}
 	}
 
 	// Attach imageID to Service.Image
+
 	targetService.Image.ID = imageID
 	targetService.Image.Name = projectName + "_" + targetService.Name
 	targetService.Image.Tag = "v0.0.1"

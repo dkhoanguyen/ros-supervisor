@@ -142,7 +142,7 @@ func print(rd io.Reader) error {
 
 func main() {
 	project := compose.CreateProject("docker-compose.yml", "/home/khoa/research/code/github/ros_docker/")
-	compose.DisplayProject(&project)
+	// compose.DisplayProject(&project)
 
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -152,7 +152,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
 	defer cancel()
 
-	dc.CreateNetwork(ctx, &project, cli, false)
+	dc.Build(ctx, cli, &project)
+	// fmt.Printf("Image Name: %s\n", project.Services[0].Image.Name)
+	dc.CreateContainers(ctx, &project, cli)
+	// dc.InspectNetwork(ctx, "ros_docker_ros", cli)
 
 	// imageID, _ := dc.BuildSingle(ctx, cli, "ros_docker", project.Services[0])
 	// fmt.Printf("Image ID: %s\n", imageID)

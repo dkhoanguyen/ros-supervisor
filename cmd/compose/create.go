@@ -2,6 +2,7 @@ package compose
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -10,14 +11,49 @@ import (
 	moby "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
 
 // Container stuff
-func CreateSingleContainer(ctx context.Context, targetService *docker.Service, dockerClient *client.Client) {
+func CreateContainers(ctx context.Context, project *compose.Project, dockerClient *client.Client) {
+	CreateNetwork(ctx, project, dockerClient, true)
+	for idx := range project.Services {
+		CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient)
+	}
+}
 
+func CreateSingleContainer(ctx context.Context, projectName string, targetService *docker.Service, targetNetwork *docker.Network, dockerClient *client.Client) {
+	containerName := projectName + "_" + targetService.Name
+	allContainers, err := dockerClient.ContainerList(ctx, moby.ContainerListOptions{
+		All: true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	// fmt.Printf("%+v\n", allContainers)
+	for _, cont := range allContainers {
+		for _, name := range cont.Names {
+			if name == "/"+containerName {
+				err := dockerClient.ContainerRemove(ctx, cont.ID, moby.ContainerRemoveOptions{})
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
+	containerConfig, networkConfig, hostConfig := PrepareContainerCreateOptions(targetService, targetNetwork)
+	// fmt.Printf("%+v\n", containerConfig.Image)
+	// fmt.Printf("%+v\n", networkConfig)
+	// fmt.Printf("%+v\n", hostConfig)
+	container, err := dockerClient.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, nil, containerName)
+	if err != nil {
+		panic(err)
+	}
+	targetService.Container = docker.Container{
+		ID:   container.ID,
+		Name: containerName,
+	}
 }
 
 func PrepareContainerCreateOptions(targetService *docker.Service, targetNetwork *docker.Network) (container.Config, network.NetworkingConfig, container.HostConfig) {
@@ -29,13 +65,14 @@ func PrepareContainerCreateOptions(targetService *docker.Service, targetNetwork 
 }
 
 func PrepareContainerConfig(targetService *docker.Service) container.Config {
+
 	return container.Config{
 		Hostname:   targetService.Hostname,
 		Domainname: targetService.Domainname,
 		User:       targetService.User,
 		Tty:        targetService.Tty,
-		Cmd:        strslice.StrSlice(targetService.Command),
-		Entrypoint: strslice.StrSlice(targetService.EntryPoint),
+		// Cmd:        strslice.StrSlice(targetService.Command),
+		// Entrypoint: strslice.StrSlice(targetService.EntryPoint),
 		Image:      targetService.Image.Name,
 		WorkingDir: targetService.WorkingDir,
 		StopSignal: "SIGTERM",
@@ -51,8 +88,12 @@ func PrepareNetworkConfig(targetService *docker.Service, targetNetwork *docker.N
 
 	endPointConfig := map[string]*network.EndpointSettings{
 		targetNetwork.Name: {
+			NetworkID: targetNetwork.ID,
 			IPAddress: targetService.Networks[0].IPv4,
 			Aliases:   aliases,
+			IPAMConfig: &network.EndpointIPAMConfig{
+				IPv4Address: targetService.Networks[0].IPv4,
+			},
 		},
 	}
 	return network.NetworkingConfig{
@@ -170,17 +211,34 @@ func PrepareNetworkOptions(projectName string, targetNetwork *docker.Network) mo
 }
 
 func CreateNetwork(ctx context.Context, project *compose.Project, dockerClient *client.Client, forceRecreate bool) {
-	for _, network := range project.Networks {
+	for idx, network := range project.Networks {
 		networkOpts := PrepareNetworkOptions(project.Name, &network)
 		networkName := project.Name + "_" + network.Name
-		_, err := dockerClient.NetworkInspect(ctx, networkName, moby.NetworkInspectOptions{})
+		info, err := dockerClient.NetworkInspect(ctx, networkName, moby.NetworkInspectOptions{})
 		// Only create network if it does not exist
 		if err != nil {
-			dockerClient.NetworkCreate(ctx, networkName, networkOpts)
+			resp, err := dockerClient.NetworkCreate(ctx, networkName, networkOpts)
+			if err != nil {
+				// Error means there could be a network existed already
+				panic(err)
+			}
+			network.ID = resp.ID
 		} else {
 			if forceRecreate {
 				// Delete old network setup and recreate them
 				// Note that all containers that use the target network must be killed
+				err := dockerClient.NetworkRemove(ctx, info.ID)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("Recreating network\n")
+				resp, err := dockerClient.NetworkCreate(ctx, networkName, networkOpts)
+				if err != nil {
+					panic(err)
+				}
+				project.Networks[idx].ID = resp.ID
+			} else {
+				// Maybe extract existing values
 			}
 		}
 	}
