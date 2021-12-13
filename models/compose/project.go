@@ -238,6 +238,8 @@ func DisplayProject(project *Project) {
 		for _, env := range service.Environment {
 			fmt.Printf("Env: %s\n", env)
 		}
+		fmt.Printf("Image ID: %s\n", service.Image.ID)
+		fmt.Printf("Container ID: %s\n", service.Container.ID)
 		fmt.Printf("=====\n")
 	}
 

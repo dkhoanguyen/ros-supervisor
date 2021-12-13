@@ -1,0 +1,26 @@
+- servicename: talker
+  containername: ros_docker_talker
+  repos:
+    - name: ros_docker
+      owner: dkhoanguyen
+      url: https://github.com/dkhoanguyen/ros_docker
+      branch: main
+      currentcommit: 99f2559d9da9cfd778999646ec0cf904809b0d7f
+      upstreamcommit: ""
+  updateready: false
+- servicename: listener
+  containername: ros_docker_listener
+  repos:
+    - name: ros_docker
+      owner: dkhoanguyen
+      url: https://github.com/dkhoanguyen/ros_docker
+      branch: main
+      currentcommit: 99f2559d9da9cfd778999646ec0cf904809b0d7f
+      upstreamcommit: ""
+    - name: ros_docker
+      owner: dkhoanguyen
+      url: https://github.com/dkhoanguyen/ros_docker
+      branch: main
+      currentcommit: 99f2559d9da9cfd778999646ec0cf904809b0d7f
+      upstreamcommit: ""
+  updateready: false

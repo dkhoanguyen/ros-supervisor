@@ -236,6 +236,17 @@ func CreateNetwork(ctx context.Context, project *compose.Project, dockerClient *
 				project.Networks[idx].ID = resp.ID
 			} else {
 				// Maybe extract existing values
+				networkRes, err := dockerClient.NetworkList(ctx, moby.NetworkListOptions{})
+				if err != nil {
+					panic(err)
+				}
+
+				for _, net := range networkRes {
+					if net.Name == networkName {
+						project.Networks[idx].ID = net.ID
+						return
+					}
+				}
 			}
 		}
 	}

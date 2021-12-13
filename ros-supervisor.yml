@@ -1,7 +1,12 @@
 services:
   talker:
-    repo: 
-      - master-https://github.com/dkhoanguyen/simple_ros_docker_test
+    - url: https://github.com/dkhoanguyen/ros_docker
+      branch: main
+      current_commit:
   listener:
-    repo:
-      - master-https://github.com/dkhoanguyen/simple_ros_docker_test
+    - url: https://github.com/dkhoanguyen/ros_docker
+      branch: main
+      current_commit:
+    - url: https://github.com/dkhoanguyen/ros_docker
+      branch: main
+      current_commit:
