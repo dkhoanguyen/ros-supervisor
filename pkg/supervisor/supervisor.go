@@ -9,8 +9,7 @@ import (
 	"strings"
 	"time"
 
-	dc "github.com/dkhoanguyen/ros-supervisor/cmd/compose"
-	"github.com/dkhoanguyen/ros-supervisor/models/compose"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/compose"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/github"
 	"github.com/docker/docker/client"
 	gh "github.com/google/go-github/github"
@@ -81,13 +80,10 @@ func extractServices(rawData map[interface{}]interface{}, ctx context.Context, g
 	return supServices
 }
 
-func PrepareSupervisor(supervisor *RosSupervisor) (*client.Client, *gh.Client) {
-	projectPath := os.Getenv("SUPERVISOR_DOCKER_PROJECT_PATH")
-	composeFile := os.Getenv("SUPERVISOR_DOCKER_COMPOSE_FILE")
-	configFile := os.Getenv("SUPERVISOR_CONFIG_FILE")
-	gitAccessToken := os.Getenv("GITHUB_ACCESS_TOKEN")
-
+func Execute() {
 	ctx := context.Background()
+
+	gitAccessToken := os.Getenv("GITHUB_ACCESS_TOKEN")
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: gitAccessToken},
 	)
@@ -99,25 +95,39 @@ func PrepareSupervisor(supervisor *RosSupervisor) (*client.Client, *gh.Client) {
 		panic(err)
 	}
 
+	rs := RosSupervisor{}
+	rs = PrepareSupervisor(ctx, &rs, dockerCli, gitClient)
+	StartSupervisor(ctx, &rs, dockerCli, gitClient)
+}
+
+func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli *client.Client, gitClient *gh.Client) RosSupervisor {
+	projectPath := os.Getenv("SUPERVISOR_DOCKER_PROJECT_PATH")
+	composeFile := os.Getenv("SUPERVISOR_DOCKER_COMPOSE_FILE")
+	configFile := os.Getenv("SUPERVISOR_CONFIG_FILE")
+
+	localCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	composeProject := compose.CreateProject(composeFile, projectPath)
+
+	rs := RosSupervisor{}
 
 	if _, err := os.Stat("supervisor_services.yml"); err != nil {
 		// File does not exist
+		// Check to see if there is any container with the given name is running
 		// Start full build
-		dc.Build(ctx, dockerCli, &composeProject)
-		dc.CreateContainers(ctx, &composeProject, dockerCli)
-		dc.StartAllServiceContainer(ctx, dockerCli, &composeProject)
+		compose.Build(localCtx, dockerCli, &composeProject)
+		compose.CreateContainers(localCtx, &composeProject, dockerCli)
+		compose.StartAllServiceContainer(localCtx, dockerCli, &composeProject)
 		// Update supervisor
-		rs := CreateRosSupervisor(ctx, gitClient, configFile, &composeProject)
-		supervisor = &rs
-
-		data, _ := yaml.Marshal(&supervisor.SupervisorServices)
+		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject)
+		data, _ := yaml.Marshal(&rs.SupervisorServices)
 		ioutil.WriteFile("supervisor_services.yml", data, 0777)
 	} else {
 		// File exist
 		// Extract existing info
 		fmt.Println("Extracting info")
-		allContainers := dc.ListAllContainers(ctx, dockerCli)
+		allContainers := compose.ListAllContainers(localCtx, dockerCli)
 
 		for _, cnt := range allContainers {
 			for idx, service := range composeProject.Services {
@@ -126,7 +136,7 @@ func PrepareSupervisor(supervisor *RosSupervisor) (*client.Client, *gh.Client) {
 				}
 			}
 		}
-		allImages := dc.ListAllImages(ctx, dockerCli)
+		allImages := compose.ListAllImages(localCtx, dockerCli)
 
 		for _, img := range allImages {
 			splitString := strings.Split(img.RepoTags[0], ":")
@@ -140,52 +150,59 @@ func PrepareSupervisor(supervisor *RosSupervisor) (*client.Client, *gh.Client) {
 			}
 		}
 
-		rs := CreateRosSupervisor(ctx, gitClient, configFile, &composeProject)
+		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject)
+		rs.DisplayProject()
 		serviceData := make([]SupervisorService, len(rs.SupervisorServices))
 		yfile, _ := ioutil.ReadFile("supervisor_services.yml")
 		yaml.Unmarshal(yfile, &serviceData)
 		rs.SupervisorServices = serviceData
-		supervisor = &rs
 	}
-	supervisor.DisplayProject()
-
-	for {
-		ctx := context.Background()
-		for idx := range supervisor.SupervisorServices {
-			for _, repo := range supervisor.SupervisorServices[idx].Repos {
-				upStreamCommit := repo.UpdateUpStreamCommit(ctx, gitClient)
-				fmt.Printf("Upstream: %s\n", upStreamCommit)
-				if repo.IsUpdateReady() {
-					fmt.Println("Update ready")
-					supervisor.SupervisorServices[idx].UpdateReady = true
-				}
-			}
-		}
-
-		// Check once every 5s
-		time.Sleep(5 * time.Second)
-
-	}
-	// Update supervisor settings
-	return dockerCli, gitClient
+	return rs
 }
 
-func StartSupervisor(supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client) {
+func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client) {
+	localCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for {
-		ctx := context.Background()
+		triggerUpdate := false
 		for idx := range supervisor.SupervisorServices {
 			for _, repo := range supervisor.SupervisorServices[idx].Repos {
-				upStreamCommit := repo.UpdateUpStreamCommit(ctx, gitClient)
+				upStreamCommit := repo.UpdateUpStreamCommit(localCtx, gitClient)
 				fmt.Printf("Upstream: %s\n", upStreamCommit)
 				if repo.IsUpdateReady() {
-					fmt.Println("Update ready")
 					supervisor.SupervisorServices[idx].UpdateReady = true
+					triggerUpdate = true
 				}
 			}
 		}
 
+		if triggerUpdate {
+			for idx := range supervisor.SupervisorServices {
+				if supervisor.SupervisorServices[idx].UpdateReady {
+					for srvIdx := range supervisor.DockerProject.Services {
+						if supervisor.DockerProject.Services[srvIdx].Name == supervisor.SupervisorServices[idx].ServiceName {
+							compose.StopService(localCtx, dockeClient, &supervisor.DockerProject.Services[srvIdx])
+							compose.RemoveService(localCtx, dockeClient, supervisor.DockerProject.Services[srvIdx].Container.ID)
+
+							compose.BuildSingle(localCtx, dockeClient, supervisor.DockerProject.Name, &supervisor.DockerProject.Services[srvIdx])
+							compose.CreateNetwork(localCtx, supervisor.DockerProject, dockeClient, false)
+							compose.CreateSingleContainer(localCtx, supervisor.DockerProject.Name, &supervisor.DockerProject.Services[srvIdx], &supervisor.DockerProject.Networks[0], dockeClient)
+							compose.StartSingleServiceContainer(localCtx, dockeClient, &supervisor.DockerProject.Services[srvIdx])
+							supervisor.SupervisorServices[idx].UpdateReady = false
+						}
+					}
+
+					for repoIdx := range supervisor.SupervisorServices[idx].Repos {
+						supervisor.SupervisorServices[idx].Repos[repoIdx].GetCurrentLocalCommit(localCtx, gitClient, "")
+					}
+				}
+			}
+
+			data, _ := yaml.Marshal(&supervisor.SupervisorServices)
+			ioutil.WriteFile("supervisor_services.yml", data, 0777)
+		}
 		// Check once every 5s
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dkhoanguyen/ros-supervisor/models/docker"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/docker/docker/api/types/network"
 	"gopkg.in/yaml.v3"
 )
@@ -139,6 +139,11 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 			for _, envVars := range envVarsOpt {
 				dService.Environment = append(dService.Environment, envVars.(string))
 			}
+		}
+
+		// Restart
+		if restartOpt, ok := serviceConfig.(map[string]interface{})["restart"].(string); ok {
+			dService.Restart = restartOpt
 		}
 
 		// Networks
