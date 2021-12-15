@@ -3,12 +3,11 @@ package compose
 import (
 	"context"
 
-	"github.com/dkhoanguyen/ros-supervisor/models/compose"
-	"github.com/dkhoanguyen/ros-supervisor/models/docker"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/docker/docker/client"
 )
 
-func StopServices(ctx context.Context, dockerClient *client.Client, project *compose.Project) {
+func StopServices(ctx context.Context, dockerClient *client.Client, project *Project) {
 	for idx := range project.Services {
 		StopService(ctx, dockerClient, &project.Services[idx])
 	}

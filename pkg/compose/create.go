@@ -6,8 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dkhoanguyen/ros-supervisor/models/compose"
-	"github.com/dkhoanguyen/ros-supervisor/models/docker"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	moby "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -17,7 +16,7 @@ import (
 )
 
 // Container stuff
-func CreateContainers(ctx context.Context, project *compose.Project, dockerClient *client.Client) {
+func CreateContainers(ctx context.Context, project *Project, dockerClient *client.Client) {
 	CreateNetwork(ctx, project, dockerClient, true)
 	for idx := range project.Services {
 		CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient)
@@ -116,6 +115,7 @@ func prepareVolumeBinding(targetService *docker.Service) []string {
 
 func getRestartPolicy(targetService *docker.Service) container.RestartPolicy {
 	var restart container.RestartPolicy
+	fmt.Println(targetService.Restart)
 	if targetService.Restart != "" {
 		split := strings.Split(targetService.Restart, ":")
 		var attemps int
@@ -207,7 +207,7 @@ func PrepareNetworkOptions(projectName string, targetNetwork *docker.Network) mo
 	}
 }
 
-func CreateNetwork(ctx context.Context, project *compose.Project, dockerClient *client.Client, forceRecreate bool) {
+func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.Client, forceRecreate bool) {
 	for idx, network := range project.Networks {
 		networkOpts := PrepareNetworkOptions(project.Name, &network)
 		networkName := project.Name + "_" + network.Name
@@ -236,6 +236,18 @@ func CreateNetwork(ctx context.Context, project *compose.Project, dockerClient *
 				project.Networks[idx].ID = resp.ID
 			} else {
 				// Maybe extract existing values
+				networkRes, err := dockerClient.NetworkList(ctx, moby.NetworkListOptions{})
+				if err != nil {
+					panic(err)
+				}
+
+				for _, net := range networkRes {
+					if net.Name == networkName {
+						fmt.Println("Extracting network ID")
+						project.Networks[idx].ID = net.ID
+						return
+					}
+				}
 			}
 		}
 	}

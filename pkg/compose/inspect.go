@@ -22,3 +22,12 @@ func InspectNetwork(ctx context.Context, networkName string, dockerClient *clien
 	}
 	return info
 }
+
+func InspectContainer(ctx context.Context, containerID string, dockerClient *client.Client) moby.ContainerJSON {
+	info, err := dockerClient.ContainerInspect(ctx, containerID)
+	if err != nil {
+		panic(err)
+	}
+
+	return info
+}

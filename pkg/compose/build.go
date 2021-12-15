@@ -7,8 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dkhoanguyen/ros-supervisor/models/compose"
-	"github.com/dkhoanguyen/ros-supervisor/models/docker"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/docker/cli/cli"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -18,7 +17,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Build(ctx context.Context, dockerClient *client.Client, project *compose.Project) {
+func Build(ctx context.Context, dockerClient *client.Client, project *Project) {
 	for idx := range project.Services {
 		_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Services[idx])
 		if err != nil {

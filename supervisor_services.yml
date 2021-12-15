@@ -1,0 +1,20 @@
+- servicename: talker
+  containername: ros_docker_talker
+  repos:
+    - name: simple_ros_docker_test
+      owner: dkhoanguyen
+      url: https://github.com/dkhoanguyen/simple_ros_docker_test
+      branch: main
+      currentcommit: 2903a647f711e34b3992d965329f458657575f65
+      upstreamcommit: ""
+  updateready: false
+- servicename: listener
+  containername: ros_docker_listener
+  repos:
+    - name: simple_ros_docker_test
+      owner: dkhoanguyen
+      url: https://github.com/dkhoanguyen/simple_ros_docker_test
+      branch: main
+      currentcommit: 2903a647f711e34b3992d965329f458657575f65
+      upstreamcommit: ""
+  updateready: false

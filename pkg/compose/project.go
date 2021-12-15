@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dkhoanguyen/ros-supervisor/models/docker"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/docker/docker/api/types/network"
 	"gopkg.in/yaml.v3"
 )
@@ -141,6 +141,11 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 			}
 		}
 
+		// Restart
+		if restartOpt, ok := serviceConfig.(map[string]interface{})["restart"].(string); ok {
+			dService.Restart = restartOpt
+		}
+
 		// Networks
 		if networkOpts, ok := serviceConfig.(map[string]interface{})["networks"].(map[string]interface{}); ok {
 			for name, network := range networkOpts {
@@ -238,6 +243,8 @@ func DisplayProject(project *Project) {
 		for _, env := range service.Environment {
 			fmt.Printf("Env: %s\n", env)
 		}
+		fmt.Printf("Image ID: %s\n", service.Image.ID)
+		fmt.Printf("Container ID: %s\n", service.Container.ID)
 		fmt.Printf("=====\n")
 	}
 
