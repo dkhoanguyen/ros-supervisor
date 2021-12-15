@@ -16,7 +16,7 @@ import (
 )
 
 // Container stuff
-func CreateContainers(ctx context.Context, project *Project, dockerClient *client.Client) {
+func CreateContainers(ctx context.Context, dockerClient *client.Client, project *Project) {
 	CreateNetwork(ctx, project, dockerClient, true)
 	for idx := range project.Services {
 		CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient)

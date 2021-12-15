@@ -22,11 +22,14 @@ type SupervisorServices []SupervisorService
 type SupervisorService struct {
 	ServiceName   string
 	ContainerName string
+	ContainerID   string
 	Repos         []github.Repo
 	UpdateReady   bool
 }
 
 type RosSupervisor struct {
+	dockerCli          *client.Client
+	gitCli             *gh.Client
 	DockerProject      *compose.Project
 	SupervisorServices SupervisorServices
 	ProjectDir         string
@@ -95,7 +98,10 @@ func Execute() {
 		panic(err)
 	}
 
-	rs := RosSupervisor{}
+	rs := RosSupervisor{
+		gitCli:    gitClient,
+		dockerCli: dockerCli,
+	}
 	rs = PrepareSupervisor(ctx, &rs, dockerCli, gitClient)
 	StartSupervisor(ctx, &rs, dockerCli, gitClient)
 }
@@ -130,7 +136,7 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 
 		// Start full build
 		compose.Build(localCtx, dockerCli, &composeProject)
-		compose.CreateContainers(localCtx, &composeProject, dockerCli)
+		compose.CreateContainers(localCtx, dockerCli, &composeProject)
 		compose.StartAllServiceContainer(localCtx, dockerCli, &composeProject)
 		// Update supervisor
 		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject)
@@ -181,10 +187,10 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 		for idx := range supervisor.SupervisorServices {
 			for _, repo := range supervisor.SupervisorServices[idx].Repos {
 				upStreamCommit := repo.UpdateUpStreamCommit(localCtx, gitClient)
-				fmt.Printf("Upstream: %s\n", upStreamCommit)
 				if repo.IsUpdateReady() {
 					supervisor.SupervisorServices[idx].UpdateReady = true
 					triggerUpdate = true
+					fmt.Printf("Update for service %s is ready. Upstream commit: %s", supervisor.SupervisorServices[idx].ContainerName, upStreamCommit)
 				}
 			}
 		}
@@ -220,19 +226,12 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 	}
 }
 
-func (s *RosSupervisor) StartDockerProject() {
-
-}
-
-func (s *RosSupervisor) CollectDockerProject() {
-
-}
-
 func (s *RosSupervisor) AttachContainers() {
 	for idx := range s.SupervisorServices {
 		for _, service := range s.DockerProject.Services {
 			if s.SupervisorServices[idx].ServiceName == service.Name {
 				s.SupervisorServices[idx].ContainerName = service.Container.Name
+				s.SupervisorServices[idx].ContainerID = service.Container.ID
 			}
 		}
 	}
