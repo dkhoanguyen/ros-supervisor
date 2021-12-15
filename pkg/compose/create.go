@@ -6,17 +6,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dkhoanguyen/ros-supervisor/models/compose"
-	"github.com/dkhoanguyen/ros-supervisor/models/docker"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	moby "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
 
 // Container stuff
-func CreateContainers(ctx context.Context, project *compose.Project, dockerClient *client.Client) {
+func CreateContainers(ctx context.Context, project *Project, dockerClient *client.Client) {
 	CreateNetwork(ctx, project, dockerClient, true)
 	for idx := range project.Services {
 		CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient)
@@ -31,7 +31,6 @@ func CreateSingleContainer(ctx context.Context, projectName string, targetServic
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Printf("%+v\n", allContainers)
 	for _, cont := range allContainers {
 		for _, name := range cont.Names {
 			if name == "/"+containerName {
@@ -43,9 +42,6 @@ func CreateSingleContainer(ctx context.Context, projectName string, targetServic
 		}
 	}
 	containerConfig, networkConfig, hostConfig := PrepareContainerCreateOptions(targetService, targetNetwork)
-	// fmt.Printf("%+v\n", containerConfig.Image)
-	// fmt.Printf("%+v\n", networkConfig)
-	// fmt.Printf("%+v\n", hostConfig)
 	container, err := dockerClient.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, nil, containerName)
 	if err != nil {
 		panic(err)
@@ -71,8 +67,8 @@ func PrepareContainerConfig(targetService *docker.Service) container.Config {
 		Domainname: targetService.Domainname,
 		User:       targetService.User,
 		Tty:        targetService.Tty,
-		// Cmd:        strslice.StrSlice(targetService.Command),
-		// Entrypoint: strslice.StrSlice(targetService.EntryPoint),
+		Cmd:        strslice.StrSlice(targetService.Command),
+		Entrypoint: strslice.StrSlice(targetService.EntryPoint),
 		Image:      targetService.Image.Name,
 		WorkingDir: targetService.WorkingDir,
 		StopSignal: "SIGTERM",
@@ -119,6 +115,7 @@ func prepareVolumeBinding(targetService *docker.Service) []string {
 
 func getRestartPolicy(targetService *docker.Service) container.RestartPolicy {
 	var restart container.RestartPolicy
+	fmt.Println(targetService.Restart)
 	if targetService.Restart != "" {
 		split := strings.Split(targetService.Restart, ":")
 		var attemps int
@@ -210,7 +207,7 @@ func PrepareNetworkOptions(projectName string, targetNetwork *docker.Network) mo
 	}
 }
 
-func CreateNetwork(ctx context.Context, project *compose.Project, dockerClient *client.Client, forceRecreate bool) {
+func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.Client, forceRecreate bool) {
 	for idx, network := range project.Networks {
 		networkOpts := PrepareNetworkOptions(project.Name, &network)
 		networkName := project.Name + "_" + network.Name
@@ -239,6 +236,18 @@ func CreateNetwork(ctx context.Context, project *compose.Project, dockerClient *
 				project.Networks[idx].ID = resp.ID
 			} else {
 				// Maybe extract existing values
+				networkRes, err := dockerClient.NetworkList(ctx, moby.NetworkListOptions{})
+				if err != nil {
+					panic(err)
+				}
+
+				for _, net := range networkRes {
+					if net.Name == networkName {
+						fmt.Println("Extracting network ID")
+						project.Networks[idx].ID = net.ID
+						return
+					}
+				}
 			}
 		}
 	}
