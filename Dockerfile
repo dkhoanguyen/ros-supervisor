@@ -5,6 +5,10 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends make git docker.io
 
 COPY . /ros-supervisor/
-RUN cd /ros-supervisor/ && go mod download
+RUN cd /ros-supervisor/ && go mod download && go build
 
-CMD ["bash","-c","cd /ros-supervisor/ && ./ros-supervisor"]
+FROM scratch as bin
+
+COPY --from=build /ros-supervisor/ros-supervisor /ros-supervisor
+WORKDIR /
+CMD ["bash","-c","./ros-supervisor"]

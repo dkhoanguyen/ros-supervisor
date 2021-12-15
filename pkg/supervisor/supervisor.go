@@ -115,6 +115,19 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 	if _, err := os.Stat("supervisor_services.yml"); err != nil {
 		// File does not exist
 		// Check to see if there is any container with the given name is running
+		// If yes then stop and remove all of them to rebuild the project
+		// In the future, for ROS integration we should keep core running, as it is
+		// rarely changed
+		allRunningContainers := compose.ListAllContainers(localCtx, dockerCli)
+
+		for _, cnt := range allRunningContainers {
+			if strings.Contains(cnt.Names[0], composeProject.Name) {
+				ID := cnt.ID
+				compose.StopServiceByID(ctx, dockerCli, ID)
+				compose.RemoveService(ctx, dockerCli, ID)
+			}
+		}
+
 		// Start full build
 		compose.Build(localCtx, dockerCli, &composeProject)
 		compose.CreateContainers(localCtx, &composeProject, dockerCli)
@@ -175,7 +188,7 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 				}
 			}
 		}
-
+		// We need a better way of mapping compose services
 		if triggerUpdate {
 			for idx := range supervisor.SupervisorServices {
 				if supervisor.SupervisorServices[idx].UpdateReady {
@@ -220,16 +233,6 @@ func (s *RosSupervisor) AttachContainers() {
 		for _, service := range s.DockerProject.Services {
 			if s.SupervisorServices[idx].ServiceName == service.Name {
 				s.SupervisorServices[idx].ContainerName = service.Container.Name
-			}
-		}
-	}
-}
-
-func (s *RosSupervisor) MonitorServiceRepo() {
-	for _, supService := range s.SupervisorServices {
-		for _, repo := range supService.Repos {
-			if repo.IsUpdateReady() {
-				supService.UpdateReady = true
 			}
 		}
 	}
