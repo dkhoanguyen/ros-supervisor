@@ -190,7 +190,7 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 				if repo.IsUpdateReady() {
 					supervisor.SupervisorServices[idx].UpdateReady = true
 					triggerUpdate = true
-					fmt.Printf("Update for service %s is ready. Upstream commit: %s", supervisor.SupervisorServices[idx].ContainerName, upStreamCommit)
+					fmt.Printf("Update for service %s is ready. Upstream commit: %s\n", supervisor.SupervisorServices[idx].ContainerName, upStreamCommit)
 				}
 			}
 		}

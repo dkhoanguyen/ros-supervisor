@@ -11,7 +11,7 @@ services:
       - "SUPERVISOR_DOCKER_PROJECT_PATH=/ros_docker/"
       - "SUPERVISOR_DOCKER_COMPOSE_FILE=docker-compose.yml"
       - "SUPERVISOR_CONFIG_FILE=ros-supervisor.yml"
-      - "GITHUB_ACCESS_TOKEN=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"
+      - "GITHUB_ACCESS_TOKEN=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"
     privileged: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

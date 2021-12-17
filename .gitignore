@@ -1,2 +1,2 @@
 ros-supervisor
-docker-compose.dev.yml
+docker-compose.supervisor.yml
