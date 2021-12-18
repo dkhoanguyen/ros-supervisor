@@ -255,4 +255,8 @@ func DisplayProject(project *Project) {
 		fmt.Printf("Network IPAM Gateway: %s\n", networks.Ipam.Config[0].Gateway)
 		fmt.Printf("=====\n")
 	}
+
+	for _, volume := range project.Volumes {
+		fmt.Printf("Volume Name: %s\n", volume.Name)
+	}
 }

@@ -22,11 +22,14 @@ type SupervisorServices []SupervisorService
 type SupervisorService struct {
 	ServiceName   string
 	ContainerName string
+	ContainerID   string
 	Repos         []github.Repo
 	UpdateReady   bool
 }
 
 type RosSupervisor struct {
+	dockerCli          *client.Client
+	gitCli             *gh.Client
 	DockerProject      *compose.Project
 	SupervisorServices SupervisorServices
 	ProjectDir         string
@@ -95,7 +98,10 @@ func Execute() {
 		panic(err)
 	}
 
-	rs := RosSupervisor{}
+	rs := RosSupervisor{
+		gitCli:    gitClient,
+		dockerCli: dockerCli,
+	}
 	rs = PrepareSupervisor(ctx, &rs, dockerCli, gitClient)
 	StartSupervisor(ctx, &rs, dockerCli, gitClient)
 }
@@ -115,9 +121,22 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 	if _, err := os.Stat("supervisor_services.yml"); err != nil {
 		// File does not exist
 		// Check to see if there is any container with the given name is running
+		// If yes then stop and remove all of them to rebuild the project
+		// In the future, for ROS integration we should keep core running, as it is
+		// rarely changed
+		allRunningContainers := compose.ListAllContainers(localCtx, dockerCli)
+
+		for _, cnt := range allRunningContainers {
+			if strings.Contains(cnt.Names[0], composeProject.Name) {
+				ID := cnt.ID
+				compose.StopServiceByID(ctx, dockerCli, ID)
+				compose.RemoveService(ctx, dockerCli, ID)
+			}
+		}
+
 		// Start full build
 		compose.Build(localCtx, dockerCli, &composeProject)
-		compose.CreateContainers(localCtx, &composeProject, dockerCli)
+		compose.CreateContainers(localCtx, dockerCli, &composeProject)
 		compose.StartAllServiceContainer(localCtx, dockerCli, &composeProject)
 		// Update supervisor
 		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject)
@@ -168,14 +187,14 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 		for idx := range supervisor.SupervisorServices {
 			for _, repo := range supervisor.SupervisorServices[idx].Repos {
 				upStreamCommit := repo.UpdateUpStreamCommit(localCtx, gitClient)
-				fmt.Printf("Upstream: %s\n", upStreamCommit)
 				if repo.IsUpdateReady() {
 					supervisor.SupervisorServices[idx].UpdateReady = true
 					triggerUpdate = true
+					fmt.Printf("Update for service %s is ready. Upstream commit: %s\n", supervisor.SupervisorServices[idx].ContainerName, upStreamCommit)
 				}
 			}
 		}
-
+		// We need a better way of mapping compose services
 		if triggerUpdate {
 			for idx := range supervisor.SupervisorServices {
 				if supervisor.SupervisorServices[idx].UpdateReady {
@@ -207,29 +226,12 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 	}
 }
 
-func (s *RosSupervisor) StartDockerProject() {
-
-}
-
-func (s *RosSupervisor) CollectDockerProject() {
-
-}
-
 func (s *RosSupervisor) AttachContainers() {
 	for idx := range s.SupervisorServices {
 		for _, service := range s.DockerProject.Services {
 			if s.SupervisorServices[idx].ServiceName == service.Name {
 				s.SupervisorServices[idx].ContainerName = service.Container.Name
-			}
-		}
-	}
-}
-
-func (s *RosSupervisor) MonitorServiceRepo() {
-	for _, supService := range s.SupervisorServices {
-		for _, repo := range supService.Repos {
-			if repo.IsUpdateReady() {
-				supService.UpdateReady = true
+				s.SupervisorServices[idx].ContainerID = service.Container.ID
 			}
 		}
 	}

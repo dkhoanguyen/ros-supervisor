@@ -6,5 +6,4 @@ import (
 
 func main() {
 	supervisor.Execute()
-	// supervisor.StartSupervisor(ctx, &rs, dockerCli, gitClient)
 }

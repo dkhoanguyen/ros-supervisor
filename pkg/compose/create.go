@@ -16,7 +16,7 @@ import (
 )
 
 // Container stuff
-func CreateContainers(ctx context.Context, project *Project, dockerClient *client.Client) {
+func CreateContainers(ctx context.Context, dockerClient *client.Client, project *Project) {
 	CreateNetwork(ctx, project, dockerClient, true)
 	for idx := range project.Services {
 		CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient)
@@ -115,7 +115,6 @@ func prepareVolumeBinding(targetService *docker.Service) []string {
 
 func getRestartPolicy(targetService *docker.Service) container.RestartPolicy {
 	var restart container.RestartPolicy
-	fmt.Println(targetService.Restart)
 	if targetService.Restart != "" {
 		split := strings.Split(targetService.Restart, ":")
 		var attemps int
@@ -210,7 +209,7 @@ func PrepareNetworkOptions(projectName string, targetNetwork *docker.Network) mo
 func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.Client, forceRecreate bool) {
 	for idx, network := range project.Networks {
 		networkOpts := PrepareNetworkOptions(project.Name, &network)
-		networkName := project.Name + "_" + network.Name
+		networkName := network.Name
 		info, err := dockerClient.NetworkInspect(ctx, networkName, moby.NetworkInspectOptions{})
 		// Only create network if it does not exist
 		if err != nil {
