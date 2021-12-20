@@ -17,3 +17,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/khoa/research/code/github/ros_docker:/ros_docker
       - /home/khoa/research/code/github/ros-supervisor:/ros-supervisor
+      - supervisor:/supervisor
+
+volumes:
+  supervisor:

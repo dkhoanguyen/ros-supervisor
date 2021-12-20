@@ -16,6 +16,9 @@ type Config struct {
 
 	GitAccessToken string `env:"GITHUB_ACCESS_TOKEN"`
 	UpdateFreq     string `env:"UPDATE_FREQUENCY"`
+
+	LoggingLevel string `env:"LOGGING_LEVEL"`
+	LoggingPath  string `env:"LOGGING_PATH"`
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {
@@ -30,6 +33,6 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 	if err = envconfig.Process(ctx, &config); err != nil {
 		return nil, err
 	}
-
+	fmt.Println(config)
 	return &config, err
 }
