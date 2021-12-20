@@ -40,7 +40,7 @@ type RosSupervisor struct {
 	ConfigFile         []byte
 }
 
-func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, targetProject *compose.Project) RosSupervisor {
+func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, targetProject *compose.Project, logger *zap.Logger) RosSupervisor {
 	supProject := RosSupervisor{
 		DockerProject: targetProject,
 	}
@@ -53,13 +53,13 @@ func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPat
 	if err2 != nil {
 		log.Fatal(err2)
 	}
-	supServices := extractServices(rawData, ctx, githubClient)
+	supServices := extractServices(rawData, ctx, githubClient, logger)
 	supProject.SupervisorServices = supServices
 	supProject.AttachContainers()
 	return supProject
 }
 
-func extractServices(rawData map[interface{}]interface{}, ctx context.Context, githubClient *gh.Client) SupervisorServices {
+func extractServices(rawData map[interface{}]interface{}, ctx context.Context, githubClient *gh.Client, logger *zap.Logger) SupervisorServices {
 	supServices := SupervisorServices{}
 	services := rawData["services"].(map[string]interface{})
 
@@ -76,7 +76,7 @@ func extractServices(rawData map[interface{}]interface{}, ctx context.Context, g
 				supService.Repos = append(supService.Repos, repo)
 			} else {
 				repo := github.MakeRepository(url, branch, "")
-				repo.GetCurrentLocalCommit(ctx, githubClient, "")
+				repo.GetCurrentLocalCommit(ctx, githubClient, "", logger)
 				supService.Repos = append(supService.Repos, repo)
 			}
 		}
@@ -152,7 +152,7 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 		compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
 		compose.StartAllServiceContainer(localCtx, dockerCli, &composeProject, logger)
 		// Update supervisor
-		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject)
+		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
 		data, _ := yaml.Marshal(&rs.SupervisorServices)
 		ioutil.WriteFile("supervisor_services.yml", data, 0777)
 	} else {
