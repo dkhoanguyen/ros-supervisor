@@ -1,3 +1,4 @@
 ros-supervisor
 docker-compose.supervisor.yml
 supervisor_services.yml
+.env.local

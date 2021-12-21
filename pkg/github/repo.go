@@ -2,9 +2,11 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/google/go-github/github"
+	"go.uber.org/zap"
 )
 
 type Repo struct {
@@ -34,27 +36,28 @@ func MakeRepository(url, branch, currentCommit string) Repo {
 	}
 }
 
-func (r *Repo) GetCurrentLocalCommit(ctx context.Context, githubClient *github.Client, commit string) string {
+func (r *Repo) GetCurrentLocalCommit(ctx context.Context, githubClient *github.Client, commit string, logger *zap.Logger) (string, error) {
 	if commit != "" {
 		r.CurrentCommit = commit
-		return commit
+		return commit, nil
 	} else {
 		allCommits, _, err := githubClient.Repositories.ListCommits(ctx, r.Owner, r.Name, &github.CommitsListOptions{})
 		if err != nil {
-			panic(err)
+			logger.Error(fmt.Sprintf("Unable to query upstream commits: %v", err))
+			return "", err
 		}
 		r.CurrentCommit = *allCommits[0].SHA
-		return r.CurrentCommit
+		return r.CurrentCommit, nil
 	}
 }
 
-func (r *Repo) UpdateUpStreamCommit(ctx context.Context, githubClient *github.Client) string {
+func (r *Repo) UpdateUpStreamCommit(ctx context.Context, githubClient *github.Client, logger *zap.Logger) (string, error) {
 	allCommits, _, err := githubClient.Repositories.ListCommits(ctx, r.Owner, r.Name, &github.CommitsListOptions{})
 	if err != nil {
-		panic(err)
+		logger.Error(fmt.Sprintf("Unable to query upstream commits: %v", err))
 	}
 	r.UpstreamCommit = *allCommits[0].SHA
-	return r.UpstreamCommit
+	return r.UpstreamCommit, err
 }
 
 func (r *Repo) IsUpdateReady() bool {

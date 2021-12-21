@@ -3,12 +3,12 @@ package compose
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"sort"
 	"strings"
 
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/docker/docker/api/types/network"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -48,7 +48,8 @@ func (project Project) GetService(name string) docker.Service {
 }
 
 // Restructure services based on dependencies
-func (project *Project) RestructureServices() {
+func (project *Project) RestructureServices(logger *zap.Logger) {
+	logger.Info("Organising services based on dependencies hierarchy")
 	restructureServices := docker.Services{}
 	numDepends := make([]int, 0)
 	numDepends = append(numDepends, 0)
@@ -79,38 +80,41 @@ func (project *Project) RestructureServices() {
 	project.Services = restructureServices
 }
 
-func CreateProject(dockerComposePath, projectPath string) Project {
+func CreateProject(dockerComposePath, projectPath string, logger *zap.Logger) Project {
 	outputProject := Project{}
 	composeFile, err := ioutil.ReadFile(dockerComposePath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("Unable to read docker-compose file.")
 	}
 	rawData := make(map[interface{}]interface{})
 	err2 := yaml.Unmarshal(composeFile, &rawData)
 	if err2 != nil {
-		log.Fatal(err2)
+		logger.Fatal("Unable to extract docker-compose file.")
 	}
 	slicedProjectPath := strings.Split(projectPath, "/")
 
 	outputProject.Name = slicedProjectPath[len(slicedProjectPath)-2]
 	outputProject.WorkingDir = projectPath
 
-	outputProject.Services = extractServices(rawData, projectPath)
-	outputProject.Networks = extractNetworks(rawData)
-	outputProject.Volumes = extractVolumes(rawData)
+	outputProject.Services = extractServices(rawData, projectPath, logger)
+	outputProject.Networks = extractNetworks(rawData, logger)
+	outputProject.Volumes = extractVolumes(rawData, logger)
 
 	outputProject.ComposeFile = composeFile
 
-	outputProject.RestructureServices()
+	outputProject.RestructureServices(logger)
 
 	return outputProject
 }
 
-func extractServices(rawData map[interface{}]interface{}, projectPath string) docker.Services {
+func extractServices(rawData map[interface{}]interface{}, projectPath string, logger *zap.Logger) docker.Services {
+	logger.Debug("Extracting all services")
 	outputServices := docker.Services{}
 	rawServices := rawData["services"].(map[string]interface{})
 	for serviceName, serviceConfig := range rawServices {
 		dService := docker.Service{}
+
+		logger.Info(fmt.Sprintf("Extracting %s", serviceName))
 
 		// Service name
 		dService.Name = serviceName
@@ -183,7 +187,9 @@ func extractServices(rawData map[interface{}]interface{}, projectPath string) do
 	return outputServices
 }
 
-func extractNetworks(rawData map[interface{}]interface{}) docker.Networks {
+func extractNetworks(rawData map[interface{}]interface{}, logger *zap.Logger) docker.Networks {
+
+	logger.Debug("Extracting networks")
 	outputNetworks := docker.Networks{}
 
 	if rawNetworks, ok := rawData["networks"].(map[string]interface{}); ok {
@@ -211,10 +217,11 @@ func extractNetworks(rawData map[interface{}]interface{}) docker.Networks {
 	return outputNetworks
 }
 
-func extractVolumes(rawData map[interface{}]interface{}) docker.Volumes {
+func extractVolumes(rawData map[interface{}]interface{}, logger *zap.Logger) docker.Volumes {
+	logger.Debug("Extracting volumes")
 	outputVolumes := docker.Volumes{}
 	if rawVolumes, ok := rawData["volumes"].(map[string]interface{}); ok {
-		for volumeName, _ := range rawVolumes {
+		for volumeName := range rawVolumes {
 			dVolume := docker.Volume{}
 			dVolume.Name = volumeName
 			outputVolumes = append(outputVolumes, dVolume)
