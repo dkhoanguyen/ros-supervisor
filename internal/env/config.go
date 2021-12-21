@@ -33,6 +33,5 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 	if err = envconfig.Process(ctx, &config); err != nil {
 		return nil, err
 	}
-	fmt.Println(config)
 	return &config, err
 }

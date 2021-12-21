@@ -158,7 +158,7 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 	} else {
 		// File exist
 		// Extract existing info
-		fmt.Println("Extracting info")
+		logger.Info("Extracting running services")
 		allContainers, err := compose.ListAllContainers(localCtx, dockerCli, logger)
 		if err != nil {
 
@@ -188,7 +188,7 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 			}
 		}
 
-		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject)
+		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
 		rs.DisplayProject()
 		serviceData := make([]SupervisorService, len(rs.SupervisorServices))
 		yfile, _ := ioutil.ReadFile("supervisor_services.yml")
@@ -218,6 +218,7 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 		}
 		// We need a better way of mapping compose services
 		if triggerUpdate {
+			logger.Info("Update is ready. Performing updates")
 			for idx := range supervisor.SupervisorServices {
 				if supervisor.SupervisorServices[idx].UpdateReady {
 					for srvIdx := range supervisor.DockerProject.Services {
@@ -244,6 +245,8 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 
 			data, _ := yaml.Marshal(&supervisor.SupervisorServices)
 			ioutil.WriteFile("supervisor_services.yml", data, 0777)
+		} else {
+			logger.Info("Update is not ready.")
 		}
 		// Check once every 5s
 		time.Sleep(10 * time.Second)
