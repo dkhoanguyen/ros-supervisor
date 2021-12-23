@@ -15,25 +15,30 @@ import (
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/pools"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-func Build(ctx context.Context, dockerClient *client.Client, project *Project) {
+func Build(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
 	for idx := range project.Services {
-		_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Services[idx])
+		_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Services[idx], logger)
 		if err != nil {
-			panic(err)
+			logger.Error(fmt.Sprintf("Unable to build service %s with errror: %s", project.Services[idx].Name, err))
+			return err
 		}
 	}
+	return nil
 }
 
-func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName string, targetService *docker.Service) (string, error) {
+func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName string, targetService *docker.Service, logger *zap.Logger) (string, error) {
 
 	// TODO Investigate build context as a git repo
-	buildCtx := PrepareLocalBuildContext(projectName, targetService, &archive.TarOptions{})
+	buildCtx, err := PrepareLocalBuildContext(projectName, targetService, &archive.TarOptions{}, logger)
+	if err != nil {
+
+	}
 	buildOpts := PrepareImageBuildOptions(projectName, targetService)
 	response, err := dockerClient.ImageBuild(ctx, buildCtx, buildOpts)
 	if err != nil {
-		panic(err)
 	}
 	defer response.Body.Close()
 
@@ -43,10 +48,9 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 	aux := func(msg jsonmessage.JSONMessage) {
 		var result types.BuildResult
 		if err := json.Unmarshal(*msg.Aux, &result); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse aux message: %s", err)
+			logger.Error(fmt.Sprintf("Failed to parse aux message: %s", err))
 		} else {
-			imageID = result.ID
-			targetService.Image.ID = imageID[7:]
+			logger.Info(fmt.Sprintf("%s", msg.Stream))
 		}
 	}
 
@@ -56,6 +60,7 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 	targetService.Image.Name = projectName + "_" + targetService.Name
 	targetService.Image.Tag = "v0.0.1"
 
+	// We need to figure out a way to read message from Message Stream and log those message for debugging build process
 	err = jsonmessage.DisplayJSONMessagesStream(response.Body, buildBuff, progBuff.Fd(), true, aux)
 	if err != nil {
 		if jerr, ok := err.(*jsonmessage.JSONError); ok {
@@ -71,21 +76,23 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 	return imageID, nil
 }
 
-func PrepareLocalBuildContext(projectName string, targetService *docker.Service, archiveOpts *archive.TarOptions) io.ReadCloser {
+func PrepareLocalBuildContext(projectName string, targetService *docker.Service, archiveOpts *archive.TarOptions, logger *zap.Logger) (io.ReadCloser, error) {
 
 	// Initial archiving
 	archiveCtx, err := archive.TarWithOptions(targetService.BuildOpt.Context, archiveOpts)
 	if err != nil {
-		panic(err)
+		logger.Error(fmt.Sprintf("Unable to create local build context with error: %s", err))
+		return nil, err
 	}
 
 	// Compress archiveCtx
-	buildCtx, error := CompressBuiltCtx(archiveCtx)
-	if error != nil {
-		panic(error)
+	buildCtx, err := CompressBuiltCtx(archiveCtx)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Unable to compress local build context with error: %s", err))
+		return nil, err
 	}
 
-	return buildCtx
+	return buildCtx, nil
 }
 
 func PrepareImageBuildOptions(projectName string, targetService *docker.Service) types.ImageBuildOptions {
@@ -115,7 +122,6 @@ func CompressBuiltCtx(buildCtx io.ReadCloser) (io.ReadCloser, error) {
 			pipeWriter.CloseWithError(
 				errors.Wrap(err, "failed to compress context"))
 			compressWriter.Close()
-			return
 		}
 		compressWriter.Close()
 		pipeWriter.Close()

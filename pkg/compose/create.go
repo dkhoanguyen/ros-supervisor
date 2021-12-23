@@ -13,30 +13,40 @@ import (
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"go.uber.org/zap"
 )
 
 // Container stuff
-func CreateContainers(ctx context.Context, dockerClient *client.Client, project *Project) {
-	CreateNetwork(ctx, project, dockerClient, true)
-	for idx := range project.Services {
-		CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient)
+func CreateContainers(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+	err := CreateNetwork(ctx, project, dockerClient, true, logger)
+	if err != nil {
+		return err
 	}
+	for idx := range project.Services {
+		_, err := CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient, logger)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func CreateSingleContainer(ctx context.Context, projectName string, targetService *docker.Service, targetNetwork *docker.Network, dockerClient *client.Client) {
+func CreateSingleContainer(ctx context.Context, projectName string, targetService *docker.Service, targetNetwork *docker.Network, dockerClient *client.Client, logger *zap.Logger) (string, error) {
+
 	containerName := projectName + "_" + targetService.Name
 	allContainers, err := dockerClient.ContainerList(ctx, moby.ContainerListOptions{
 		All: true,
 	})
 	if err != nil {
-		panic(err)
+		logger.Error("Failed to list all containers")
 	}
 	for _, cont := range allContainers {
 		for _, name := range cont.Names {
 			if name == "/"+containerName {
 				err := dockerClient.ContainerRemove(ctx, cont.ID, moby.ContainerRemoveOptions{})
 				if err != nil {
-					panic(err)
+					logger.Error(fmt.Sprintf("Failed to remove designated container with error: %s", err))
+					return "", err
 				}
 			}
 		}
@@ -44,12 +54,15 @@ func CreateSingleContainer(ctx context.Context, projectName string, targetServic
 	containerConfig, networkConfig, hostConfig := PrepareContainerCreateOptions(targetService, targetNetwork)
 	container, err := dockerClient.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, nil, containerName)
 	if err != nil {
-		panic(err)
+		logger.Error(fmt.Sprintf("Failed to create container with error: %s", err))
+		return "", err
 	}
 	targetService.Container = docker.Container{
 		ID:   container.ID,
 		Name: containerName,
 	}
+
+	return container.ID, nil
 }
 
 func PrepareContainerCreateOptions(targetService *docker.Service, targetNetwork *docker.Network) (container.Config, network.NetworkingConfig, container.HostConfig) {
@@ -206,7 +219,7 @@ func PrepareNetworkOptions(projectName string, targetNetwork *docker.Network) mo
 	}
 }
 
-func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.Client, forceRecreate bool) {
+func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.Client, forceRecreate bool, logger *zap.Logger) error {
 	for idx, network := range project.Networks {
 		networkOpts := PrepareNetworkOptions(project.Name, &network)
 		networkName := network.Name
@@ -216,7 +229,8 @@ func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.C
 			resp, err := dockerClient.NetworkCreate(ctx, networkName, networkOpts)
 			if err != nil {
 				// Error means there could be a network existed already
-				panic(err)
+				logger.Error(fmt.Sprintf("Unable to create network %s with error: %v", networkName, err))
+				return err
 			}
 			network.ID = resp.ID
 		} else {
@@ -225,31 +239,35 @@ func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.C
 				// Note that all containers that use the target network must be killed
 				err := dockerClient.NetworkRemove(ctx, info.ID)
 				if err != nil {
-					panic(err)
+					logger.Error(fmt.Sprintf("Unable to remove network %s with error: %v", networkName, err))
+					return err
 				}
-				fmt.Printf("Recreating network\n")
+				logger.Info(fmt.Sprintf("Recreating network %s", networkName))
 				resp, err := dockerClient.NetworkCreate(ctx, networkName, networkOpts)
 				if err != nil {
-					panic(err)
+					logger.Error(fmt.Sprintf("Unable to create network %s with error: %v", networkName, err))
+					return err
 				}
 				project.Networks[idx].ID = resp.ID
 			} else {
 				// Maybe extract existing values
 				networkRes, err := dockerClient.NetworkList(ctx, moby.NetworkListOptions{})
 				if err != nil {
-					panic(err)
+					logger.Error(fmt.Sprintf("Unable to list network %s with error: %v", networkName, err))
+					return err
 				}
 
 				for _, net := range networkRes {
 					if net.Name == networkName {
-						fmt.Println("Extracting network ID")
+						logger.Info("Extracting Network Info")
 						project.Networks[idx].ID = net.ID
-						return
+						return nil
 					}
 				}
 			}
 		}
 	}
+	return nil
 }
 
 // Volume stuff
