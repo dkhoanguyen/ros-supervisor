@@ -11,9 +11,13 @@ import (
 
 	"github.com/dkhoanguyen/ros-supervisor/internal/env"
 	"github.com/dkhoanguyen/ros-supervisor/internal/logging"
+	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/compose"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/github"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/handlers/health"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/handlers/v1/supervisor"
 	"github.com/docker/docker/client"
+	"github.com/gin-gonic/gin"
 	gh "github.com/google/go-github/github"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -31,13 +35,17 @@ type SupervisorService struct {
 }
 
 type RosSupervisor struct {
-	dockerCli          *client.Client
-	gitCli             *gh.Client
+	DockerCli          *client.Client
+	GitCli             *gh.Client
 	DockerProject      *compose.Project
 	SupervisorServices SupervisorServices
 	ProjectDir         string
 	MonitorTimeout     time.Duration
 	ConfigFile         []byte
+}
+
+type SupervisorCommand struct {
+	Update bool `json:"update"`
 }
 
 func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, targetProject *compose.Project, logger *zap.Logger) RosSupervisor {
@@ -86,31 +94,84 @@ func extractServices(rawData map[interface{}]interface{}, ctx context.Context, g
 	return supServices
 }
 
+func StartProcess(c *gin.Context) {
+	var supCommand SupervisorCommand
+	if err := c.BindJSON(&supCommand); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(supCommand)
+}
+
 func Execute() {
 	ctx := context.Background()
 
-	gitAccessToken := os.Getenv("GITHUB_ACCESS_TOKEN")
+	envConfig, err := env.LoadConfig(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	logger := logging.Make(envConfig)
+
+	gitAccessToken := envConfig.GitAccessToken
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: gitAccessToken},
 	)
 	tc := oauth2.NewClient(ctx, ts)
 	gitClient := gh.NewClient(tc)
 
+	// We should verify github client here first
+
 	dockerCli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		panic(err)
+		logger.Fatal(fmt.Sprintf("%s", err))
 	}
 
 	rs := RosSupervisor{
-		gitCli:    gitClient,
-		dockerCli: dockerCli,
+		GitCli:     gitClient,
+		DockerCli:  dockerCli,
+		ProjectDir: envConfig.SupervisorProjectPath,
 	}
 
-	rs, logger := PrepareSupervisor(ctx, &rs, dockerCli, gitClient)
-	StartSupervisor(ctx, &rs, dockerCli, gitClient, logger)
+	// Router and handlers
+	cmd := supervisor.SupervisorCommand{
+		Update: false,
+	}
+	router := gin.Default()
+
+	router.GET("/health/liveness", health.LivenessGet)
+	router.POST("/cmd", supervisor.MakeCommand(ctx, &cmd))
+	go router.Run("172.21.0.2:8080")
+
+	for {
+		// If the supervisor_services does not exist, wait for update signal (which should only trigger once the file is received and placed appropriately)
+		if _, err := os.Stat("/supervisor/project/"); err != nil {
+			err := os.Mkdir("/supervisor/project/", os.ModePerm)
+			if err != nil {
+				logger.Fatal(fmt.Sprintf("%s", err))
+			}
+			continue
+		}
+		if utils.FileExists("/supervisor/project/docker-compose.yml") &&
+			utils.FileExists("/supervisor/project/ros-supervisor.yml") {
+			if err != nil {
+				logger.Fatal(fmt.Sprintf("%s", err))
+			}
+			if cmd.Update {
+				rs := PrepareSupervisor(ctx, &rs)
+				cmd.Update = false
+				StartSupervisor(ctx, &rs, dockerCli, gitClient, logger)
+			} else {
+				time.Sleep(2 * time.Second)
+			}
+
+		} else {
+			time.Sleep(2 * time.Second)
+		}
+	}
 }
 
-func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli *client.Client, gitClient *gh.Client) (RosSupervisor, *zap.Logger) {
+func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor) RosSupervisor {
 	localCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -124,11 +185,14 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 	composeFile := envConfig.SupervisorComposeFile
 	configFile := envConfig.SupervisorConfigFile
 
+	dockerCli := supervisor.DockerCli
+	gitClient := supervisor.GitCli
+
 	composeProject := compose.CreateProject(composeFile, projectPath, logger)
 
 	rs := RosSupervisor{}
 
-	if _, err := os.Stat("supervisor_services.yml"); err != nil {
+	if _, err := os.Stat("/supervisor/supervisor_services.yml"); err != nil {
 		// File does not exist
 		// Check to see if there is any container with the given name is running
 		// If yes then stop and remove all of them to rebuild the project
@@ -154,7 +218,7 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 		// Update supervisor
 		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
 		data, _ := yaml.Marshal(&rs.SupervisorServices)
-		ioutil.WriteFile("supervisor_services.yml", data, 0777)
+		ioutil.WriteFile("/supervisor/supervisor_services.yml", data, 0777)
 	} else {
 		// File exist
 		// Extract existing info
@@ -189,13 +253,12 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 		}
 
 		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
-		rs.DisplayProject()
 		serviceData := make([]SupervisorService, len(rs.SupervisorServices))
-		yfile, _ := ioutil.ReadFile("supervisor_services.yml")
+		yfile, _ := ioutil.ReadFile("/supervisor/supervisor_services.yml")
 		yaml.Unmarshal(yfile, &serviceData)
 		rs.SupervisorServices = serviceData
 	}
-	return rs, logger
+	return rs
 }
 
 func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client, logger *zap.Logger) {

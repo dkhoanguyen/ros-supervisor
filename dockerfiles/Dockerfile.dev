@@ -5,5 +5,5 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends make git docker.io
 
 RUN mkdir /project
-
+EXPOSE 8080
 CMD ["bash","-c","tail -f /dev/null"]
