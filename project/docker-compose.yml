@@ -1,0 +1,55 @@
+version: "3.0"
+
+services:
+  core:
+    container_name: core
+    build: 
+      context: .
+      dockerfile: images/core/Dockerfile
+    restart:  always
+    networks:
+      ros:
+        ipv4_address: 172.22.0.2
+
+  talker:
+    container_name: talker
+    build:
+      context: .
+      dockerfile: images/talker/Dockerfile
+    environment:
+      - "ROS_HOSTNAME=talker"
+      - "ROS_IP=172.22.0.3"
+      - "ROS_MASTER_URI=http://core:11311"
+      - "TARGET_REPO=https://github.com/dkhoanguyen/todo-app.git"
+    volumes:
+      - /etc/hosts:/tmp/hosts
+    depends_on:
+      - core
+    networks:
+      ros:
+        ipv4_address: 172.22.0.3
+
+  listener:
+    container_name: listener
+    build: 
+      context: .
+      dockerfile: images/listener/Dockerfile
+    environment:
+      - "ROS_HOSTNAME=listener"
+      - "ROS_IP=172.22.0.4"
+      - "ROS_MASTER_URI=http://core:11311"
+    volumes:
+      - /etc/hosts:/tmp/hosts
+    depends_on:
+      - core
+    networks:
+      ros:
+        ipv4_address: 172.22.0.4
+
+networks:
+  ros:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+          gateway: 172.22.0.1

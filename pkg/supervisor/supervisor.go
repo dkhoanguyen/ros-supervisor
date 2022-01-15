@@ -135,7 +135,8 @@ func Execute() {
 
 	// Router and handlers
 	cmd := supervisor.SupervisorCommand{
-		Update: false,
+		UpdateCore:     false,
+		UpdateServices: false,
 	}
 	router := gin.Default()
 
@@ -157,13 +158,10 @@ func Execute() {
 			if err != nil {
 				logger.Fatal(fmt.Sprintf("%s", err))
 			}
-			if cmd.Update {
-				rs := PrepareSupervisor(ctx, &rs)
-				cmd.Update = false
-				StartSupervisor(ctx, &rs, dockerCli, gitClient, logger)
-			} else {
-				time.Sleep(2 * time.Second)
-			}
+
+			rs := PrepareSupervisor(ctx, &rs, &cmd)
+			StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
+			time.Sleep(2 * time.Second)
 
 		} else {
 			time.Sleep(2 * time.Second)
@@ -171,7 +169,11 @@ func Execute() {
 	}
 }
 
-func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor) RosSupervisor {
+func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supervisor.SupervisorCommand) RosSupervisor {
+	if !cmd.UpdateCore && !cmd.UpdateServices {
+		return RosSupervisor{}
+	}
+
 	localCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -189,6 +191,7 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor) RosSuperv
 	gitClient := supervisor.GitCli
 
 	composeProject := compose.CreateProject(composeFile, projectPath, logger)
+	// compose.DisplayProject(&composeProject)
 
 	rs := RosSupervisor{}
 
@@ -209,12 +212,27 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor) RosSuperv
 				compose.StopServiceByID(ctx, dockerCli, ID, logger)
 				compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
 			}
+
+			if strings.Contains(cnt.Names[0], "core") && cmd.UpdateCore {
+				ID := cnt.ID
+				compose.StopServiceByID(ctx, dockerCli, ID, logger)
+				compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
+			}
 		}
 
-		// Start full build
-		compose.Build(localCtx, dockerCli, &composeProject, logger)
-		compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
-		compose.StartAllServiceContainer(localCtx, dockerCli, &composeProject, logger)
+		// Start full build if update_core is true
+		if cmd.UpdateCore {
+			logger.Info("Building core and services")
+			compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
+			compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
+			compose.StartAll(localCtx, dockerCli, &composeProject, logger)
+		} else {
+			logger.Info("Building services")
+			compose.BuildServices(localCtx, dockerCli, &composeProject, logger)
+			compose.CreateServiceContainers(localCtx, dockerCli, &composeProject, logger)
+			compose.StartServices(localCtx, dockerCli, &composeProject, logger)
+		}
+
 		// Update supervisor
 		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
 		data, _ := yaml.Marshal(&rs.SupervisorServices)
@@ -261,7 +279,11 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor) RosSuperv
 	return rs
 }
 
-func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client, logger *zap.Logger) {
+func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client, cmd *supervisor.SupervisorCommand, logger *zap.Logger) {
+	if !cmd.UpdateCore && !cmd.UpdateServices {
+		return
+	}
+
 	localCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	for {

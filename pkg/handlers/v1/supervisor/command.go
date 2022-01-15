@@ -8,7 +8,8 @@ import (
 )
 
 type SupervisorCommand struct {
-	Update bool `json:"update"`
+	UpdateCore     bool `json:"update_core"`
+	UpdateServices bool `json:"update_services"`
 }
 
 func MakeCommand(parentCtx context.Context, cmd *SupervisorCommand) gin.HandlerFunc {

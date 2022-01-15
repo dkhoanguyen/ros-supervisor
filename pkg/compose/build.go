@@ -18,7 +18,31 @@ import (
 	"go.uber.org/zap"
 )
 
-func Build(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func BuildAll(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+
+	err := BuildCore(ctx, dockerClient, project, logger)
+	if err != nil {
+		return err
+	}
+	err = BuildServices(ctx, dockerClient, project, logger)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func BuildCore(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+	logger.Info("Building core")
+	_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Core, logger)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Unable to build core with errror: %s", err))
+		return err
+	}
+	return nil
+}
+
+func BuildServices(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+	logger.Info("Building services")
 	for idx := range project.Services {
 		_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Services[idx], logger)
 		if err != nil {
@@ -31,6 +55,7 @@ func Build(ctx context.Context, dockerClient *client.Client, project *Project, l
 
 func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName string, targetService *docker.Service, logger *zap.Logger) (string, error) {
 
+	logger.Info(fmt.Sprintf("Building service %s", targetService.Name))
 	// TODO Investigate build context as a git repo
 	buildCtx, err := PrepareLocalBuildContext(projectName, targetService, &archive.TarOptions{}, logger)
 	if err != nil {
@@ -39,6 +64,7 @@ func BuildSingle(ctx context.Context, dockerClient *client.Client, projectName s
 	buildOpts := PrepareImageBuildOptions(projectName, targetService)
 	response, err := dockerClient.ImageBuild(ctx, buildCtx, buildOpts)
 	if err != nil {
+		logger.Fatal(fmt.Sprintf("Error: %s", err))
 	}
 	defer response.Body.Close()
 
