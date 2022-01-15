@@ -8,7 +8,7 @@ COPY . /ros-supervisor/
 RUN cd /ros-supervisor/ && go mod download && go build
 
 WORKDIR /
-CMD [ "bash", "-c", "tail -f /dev/null" ]
+CMD [ "bash", "-c", "cd ros-supervisor && ./ros-supervisor" ]
 
 # FROM scratch as bin
 
