@@ -26,6 +26,10 @@ import (
 
 type SupervisorServices []SupervisorService
 
+type ProjectContext struct {
+	UseGitContext bool
+	TargetRepo    github.Repo
+}
 type SupervisorService struct {
 	ServiceName   string
 	ContainerName string
@@ -37,6 +41,7 @@ type SupervisorService struct {
 type RosSupervisor struct {
 	DockerCli          *client.Client
 	GitCli             *gh.Client
+	ProjectCtx         ProjectContext
 	DockerProject      *compose.Project
 	SupervisorServices SupervisorServices
 	ProjectDir         string
@@ -48,10 +53,8 @@ type SupervisorCommand struct {
 	Update bool `json:"update"`
 }
 
-func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, targetProject *compose.Project, logger *zap.Logger) RosSupervisor {
-	supProject := RosSupervisor{
-		DockerProject: targetProject,
-	}
+func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, projectDir string, logger *zap.Logger) (RosSupervisor, string) {
+	supProject := RosSupervisor{}
 	configFile, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		panic(err)
@@ -61,10 +64,21 @@ func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPat
 	if err2 != nil {
 		log.Fatal(err2)
 	}
-	supServices := extractServices(rawData, ctx, githubClient, logger)
-	supProject.SupervisorServices = supServices
-	supProject.AttachContainers()
-	return supProject
+	supProject.ProjectCtx = extractProjectContext(rawData, logger)
+	supProject.SupervisorServices = extractServices(rawData, ctx, githubClient, logger)
+
+	// If use_git_context then get the latest commit and use it as the build context
+	projectPath := prepareProjectDirFromGit(supProject.ProjectCtx, projectDir, logger)
+	return supProject, projectPath
+}
+
+func extractProjectContext(rawData map[interface{}]interface{}, logger *zap.Logger) ProjectContext {
+	ctx := ProjectContext{}
+	rawCtx := rawData["context"].(map[string]interface{})
+
+	ctx.UseGitContext = rawCtx["use_git_context"].(bool)
+	ctx.TargetRepo = github.MakeRepository(rawCtx["url"].(string), rawCtx["branch"].(string), "")
+	return ctx
 }
 
 func extractServices(rawData map[interface{}]interface{}, ctx context.Context, githubClient *gh.Client, logger *zap.Logger) SupervisorServices {
@@ -92,6 +106,18 @@ func extractServices(rawData map[interface{}]interface{}, ctx context.Context, g
 	}
 
 	return supServices
+}
+
+func prepareProjectDirFromGit(projectCtx ProjectContext, projectDir string, logger *zap.Logger) string {
+	if projectCtx.UseGitContext {
+		// Clone git repo
+		logger.Info("Cloning project dir")
+		projectPath := projectCtx.TargetRepo.Clone(projectDir, logger)
+		return projectPath
+	} else {
+		return projectCtx.TargetRepo.GetFullPath(projectDir, logger)
+	}
+
 }
 
 func StartProcess(c *gin.Context) {
@@ -159,7 +185,7 @@ func Execute() {
 				logger.Fatal(fmt.Sprintf("%s", err))
 			}
 
-			rs := PrepareSupervisor(ctx, &rs, &cmd)
+			PrepareSupervisor(ctx, &rs, &cmd)
 			StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
 			time.Sleep(2 * time.Second)
 
@@ -183,17 +209,16 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 	}
 
 	logger := logging.Make(envConfig)
-	projectPath := envConfig.SupervisorProjectPath
+	projectDir := envConfig.SupervisorProjectPath
 	composeFile := envConfig.SupervisorComposeFile
 	configFile := envConfig.SupervisorConfigFile
 
 	dockerCli := supervisor.DockerCli
 	gitClient := supervisor.GitCli
 
-	composeProject := compose.CreateProject(composeFile, projectPath, logger)
-	// compose.DisplayProject(&composeProject)
+	rs, projectPath := CreateRosSupervisor(localCtx, gitClient, configFile, projectDir, logger)
 
-	rs := RosSupervisor{}
+	composeProject := compose.CreateProject(composeFile, projectPath, logger)
 
 	if _, err := os.Stat("/supervisor/supervisor_services.yml"); err != nil {
 		// File does not exist
@@ -234,7 +259,8 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 		}
 
 		// Update supervisor
-		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
+		rs.DockerProject = &composeProject
+		rs.AttachContainers()
 		data, _ := yaml.Marshal(&rs.SupervisorServices)
 		ioutil.WriteFile("/supervisor/supervisor_services.yml", data, 0777)
 	} else {
@@ -270,7 +296,6 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 			}
 		}
 
-		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
 		serviceData := make([]SupervisorService, len(rs.SupervisorServices))
 		yfile, _ := ioutil.ReadFile("/supervisor/supervisor_services.yml")
 		yaml.Unmarshal(yfile, &serviceData)

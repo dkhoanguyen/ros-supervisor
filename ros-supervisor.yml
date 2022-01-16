@@ -4,8 +4,9 @@ info:
   distro: noetic
 
 context:
-  use_master_context: false
-  path: https://github.com/dkhoanguyen/ros_docker
+  use_git_context: true
+  branch: main
+  url: https://github.com/dkhoanguyen/ros_docker
 
 # Custom configuration for setting up roscore and other optional features
 core:

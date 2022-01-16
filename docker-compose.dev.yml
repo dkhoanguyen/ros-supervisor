@@ -3,6 +3,7 @@ version: "3.0"
 services:
   supervisor: 
     container_name: ros_supervisor
+    hostname: ros_supervisor
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile.dev
@@ -11,7 +12,7 @@ services:
       - 8080:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/khoa/research/code/github/ros_docker:/ros_docker
+      - /home/khoa/research/code/github/ros-supervisor:/ros_supervisor
       - supervisor:/supervisor
     healthcheck:
       test: [ "CMD-SHELL", "curl http://localhost:8080/health/liveness --silent --include --header 'Content-Type: application/json' --request 'GET' || exit 1" ]
@@ -20,7 +21,7 @@ services:
       retries: 3
     networks:
       supervisor:
-        ipv4_address: 172.21.0.4
+        ipv4_address: 172.21.0.2
 
 volumes:
   supervisor:
