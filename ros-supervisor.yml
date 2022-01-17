@@ -1,3 +1,18 @@
+# Master context provides definitions and declarations of a skeleton structure of a ros project
+info:
+  name: ros_docker_test
+  distro: noetic
+
+context:
+  use_git_context: true
+  branch: main
+  url: https://github.com/dkhoanguyen/ros_docker
+
+# Custom configuration for setting up roscore and other optional features
+core:
+  enable_bridge: true # Expose all topics through websockets and allows other third parties to subscribe to the websocket path
+  enable_master_discovery: true # Enable multi master feature
+
 services:
   talker:
     - url: https://github.com/dkhoanguyen/simple_ros_docker_test

@@ -10,10 +10,36 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartAllServiceContainer(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func StartAll(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+
+	err := StartCore(ctx, dockerClient, project, logger)
+	if err != nil {
+		return err
+	}
+
+	err = StartServices(ctx, dockerClient, project, logger)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func StartCore(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+	logger.Info("Starting core container")
+	err := StartSingleServiceContainer(ctx, dockerClient, &project.Core, logger)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Failed to start core container with error: %s", err))
+		return err
+	}
+	return nil
+}
+
+func StartServices(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+	logger.Info("Starting all service containers")
 	for idx := range project.Services {
 		err := StartSingleServiceContainer(ctx, dockerClient, &project.Services[idx], logger)
 		if err != nil {
+			logger.Fatal(fmt.Sprintf("Failed to start service %s container with error: %s", project.Services[idx].Name, err))
 			return err
 		}
 	}
