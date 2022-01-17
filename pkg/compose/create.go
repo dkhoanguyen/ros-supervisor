@@ -18,13 +18,53 @@ import (
 
 // Container stuff
 func CreateContainers(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
-	err := CreateNetwork(ctx, project, dockerClient, true, logger)
+
+	err := CreateCoreContainer(ctx, dockerClient, project, logger)
 	if err != nil {
 		return err
 	}
+
+	logger.Info("Creating container for services")
 	for idx := range project.Services {
 		_, err := CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient, logger)
 		if err != nil {
+			logger.Fatal(fmt.Sprintf("Unable to create container for service %s with error: %s", project.Services[idx].Name, err))
+			return err
+		}
+	}
+	return nil
+}
+
+func CreateCoreContainer(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+
+	err := CreateNetwork(ctx, project, dockerClient, true, logger)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Unable to create network %s with error: %s", project.Networks[0].Name, err))
+		return err
+	}
+
+	logger.Info("Creating container for core")
+	_, err = CreateSingleContainer(ctx, project.Name, &project.Core, &project.Networks[0], dockerClient, logger)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Unable to create container for core with error: %s", err))
+		return err
+	}
+	return nil
+}
+
+func CreateServiceContainers(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+
+	err := CreateNetwork(ctx, project, dockerClient, false, logger)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Unable to create network %s with error: %s", project.Networks[0].Name, err))
+		return err
+	}
+
+	logger.Info("Creating container for services")
+	for idx := range project.Services {
+		_, err := CreateSingleContainer(ctx, project.Name, &project.Services[idx], &project.Networks[0], dockerClient, logger)
+		if err != nil {
+			logger.Fatal(fmt.Sprintf("Unable to create container for service %s with error: %s", project.Services[idx].Name, err))
 			return err
 		}
 	}

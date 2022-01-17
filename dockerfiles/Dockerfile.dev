@@ -2,8 +2,9 @@
 FROM golang:1.17 AS build
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends make git docker.io
+  && apt-get install -y --no-install-recommends make git
 
-RUN mkdir /project
+RUN mkdir /ros_project
 
-CMD ["bash","-c","tail -f /dev/null"]
+WORKDIR /
+CMD [ "bash", "-c", "tail -f /dev/null" ]

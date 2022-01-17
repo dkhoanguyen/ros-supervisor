@@ -6,13 +6,13 @@ services:
     hostname: ros_supervisor
     build:
       context: .
-      dockerfile: dockerfiles/Dockerfile
+      dockerfile: dockerfiles/Dockerfile.dev
     privileged: true
-    restart: always
     ports:
       - 8080:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /home/khoa/research/code/github/ros-supervisor:/ros_supervisor
       - supervisor:/supervisor
     healthcheck:
       test: [ "CMD-SHELL", "curl http://localhost:8080/health/liveness --silent --include --header 'Content-Type: application/json' --request 'GET' || exit 1" ]

@@ -11,9 +11,13 @@ import (
 
 	"github.com/dkhoanguyen/ros-supervisor/internal/env"
 	"github.com/dkhoanguyen/ros-supervisor/internal/logging"
+	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/compose"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/github"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/handlers/health"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/handlers/v1/supervisor"
 	"github.com/docker/docker/client"
+	"github.com/gin-gonic/gin"
 	gh "github.com/google/go-github/github"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -22,6 +26,10 @@ import (
 
 type SupervisorServices []SupervisorService
 
+type ProjectContext struct {
+	UseGitContext bool
+	TargetRepo    github.Repo
+}
 type SupervisorService struct {
 	ServiceName   string
 	ContainerName string
@@ -31,8 +39,9 @@ type SupervisorService struct {
 }
 
 type RosSupervisor struct {
-	dockerCli          *client.Client
-	gitCli             *gh.Client
+	DockerCli          *client.Client
+	GitCli             *gh.Client
+	ProjectCtx         ProjectContext
 	DockerProject      *compose.Project
 	SupervisorServices SupervisorServices
 	ProjectDir         string
@@ -40,10 +49,12 @@ type RosSupervisor struct {
 	ConfigFile         []byte
 }
 
-func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, targetProject *compose.Project, logger *zap.Logger) RosSupervisor {
-	supProject := RosSupervisor{
-		DockerProject: targetProject,
-	}
+type SupervisorCommand struct {
+	Update bool `json:"update"`
+}
+
+func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, projectDir string, logger *zap.Logger) (RosSupervisor, string) {
+	supProject := RosSupervisor{}
 	configFile, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		panic(err)
@@ -53,10 +64,21 @@ func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPat
 	if err2 != nil {
 		log.Fatal(err2)
 	}
-	supServices := extractServices(rawData, ctx, githubClient, logger)
-	supProject.SupervisorServices = supServices
-	supProject.AttachContainers()
-	return supProject
+	supProject.ProjectCtx = extractProjectContext(rawData, logger)
+	supProject.SupervisorServices = extractServices(rawData, ctx, githubClient, logger)
+
+	// If use_git_context then get the latest commit and use it as the build context
+	projectPath := prepareProjectDirFromGit(supProject.ProjectCtx, projectDir, logger)
+	return supProject, projectPath
+}
+
+func extractProjectContext(rawData map[interface{}]interface{}, logger *zap.Logger) ProjectContext {
+	ctx := ProjectContext{}
+	rawCtx := rawData["context"].(map[string]interface{})
+
+	ctx.UseGitContext = rawCtx["use_git_context"].(bool)
+	ctx.TargetRepo = github.MakeRepository(rawCtx["url"].(string), rawCtx["branch"].(string), "")
+	return ctx
 }
 
 func extractServices(rawData map[interface{}]interface{}, ctx context.Context, githubClient *gh.Client, logger *zap.Logger) SupervisorServices {
@@ -86,31 +108,96 @@ func extractServices(rawData map[interface{}]interface{}, ctx context.Context, g
 	return supServices
 }
 
+func prepareProjectDirFromGit(projectCtx ProjectContext, projectDir string, logger *zap.Logger) string {
+	if projectCtx.UseGitContext {
+		// Clone git repo
+		logger.Info("Cloning project dir")
+		projectPath := projectCtx.TargetRepo.Clone(projectDir, logger)
+		return projectPath
+	} else {
+		return projectCtx.TargetRepo.GetFullPath(projectDir, logger)
+	}
+
+}
+
+func StartProcess(c *gin.Context) {
+	var supCommand SupervisorCommand
+	if err := c.BindJSON(&supCommand); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(supCommand)
+}
+
 func Execute() {
 	ctx := context.Background()
 
-	gitAccessToken := os.Getenv("GITHUB_ACCESS_TOKEN")
+	envConfig, err := env.LoadConfig(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	logger := logging.Make(envConfig)
+
+	gitAccessToken := envConfig.GitAccessToken
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: gitAccessToken},
 	)
 	tc := oauth2.NewClient(ctx, ts)
 	gitClient := gh.NewClient(tc)
 
+	// We should verify github client here first
+
 	dockerCli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		panic(err)
+		logger.Fatal(fmt.Sprintf("%s", err))
 	}
 
 	rs := RosSupervisor{
-		gitCli:    gitClient,
-		dockerCli: dockerCli,
+		GitCli:     gitClient,
+		DockerCli:  dockerCli,
+		ProjectDir: envConfig.SupervisorProjectPath,
 	}
 
-	rs, logger := PrepareSupervisor(ctx, &rs, dockerCli, gitClient)
-	StartSupervisor(ctx, &rs, dockerCli, gitClient, logger)
+	// Router and handlers
+	cmd := supervisor.SupervisorCommand{
+		UpdateCore:     false,
+		UpdateServices: false,
+	}
+	router := gin.Default()
+
+	router.GET("/health/liveness", health.LivenessGet)
+	router.POST("/cmd", supervisor.MakeCommand(ctx, &cmd))
+	go router.Run("172.21.0.2:8080")
+
+	for {
+		// If the supervisor_services does not exist, wait for update signal (which should only trigger once the file is received and placed appropriately)
+		if _, err := os.Stat("/supervisor/project/"); err != nil {
+			err := os.Mkdir("/supervisor/project/", os.ModePerm)
+			if err != nil {
+				logger.Fatal(fmt.Sprintf("%s", err))
+			}
+			continue
+		}
+		// Maybe it's better to use json data instead of this - ie send compose over http POST in json format
+		if utils.FileExists("/supervisor/project/docker-compose.yml") &&
+			utils.FileExists("/supervisor/project/ros-supervisor.yml") {
+			if err != nil {
+				logger.Fatal(fmt.Sprintf("%s", err))
+			}
+
+			PrepareSupervisor(ctx, &rs, &cmd)
+			StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
+			time.Sleep(2 * time.Second)
+
+		} else {
+			time.Sleep(2 * time.Second)
+		}
+	}
 }
 
-func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli *client.Client, gitClient *gh.Client) (RosSupervisor, *zap.Logger) {
+func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supervisor.SupervisorCommand) RosSupervisor {
+
 	localCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -120,15 +207,19 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 	}
 
 	logger := logging.Make(envConfig)
-	projectPath := envConfig.SupervisorProjectPath
+	projectDir := envConfig.SupervisorProjectPath
 	composeFile := envConfig.SupervisorComposeFile
 	configFile := envConfig.SupervisorConfigFile
 
+	dockerCli := supervisor.DockerCli
+	gitClient := supervisor.GitCli
+
+	rs, projectPath := CreateRosSupervisor(localCtx, gitClient, configFile, projectDir, logger)
+
 	composeProject := compose.CreateProject(composeFile, projectPath, logger)
+	_, err = os.Stat("/supervisor/supervisor_services.yml")
 
-	rs := RosSupervisor{}
-
-	if _, err := os.Stat("supervisor_services.yml"); err != nil {
+	if err != nil || cmd.UpdateServices || cmd.UpdateCore {
 		// File does not exist
 		// Check to see if there is any container with the given name is running
 		// If yes then stop and remove all of them to rebuild the project
@@ -138,25 +229,58 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 		if err != nil {
 
 		}
-
 		for _, cnt := range allRunningContainers {
-			if strings.Contains(cnt.Names[0], composeProject.Name) {
+			// If service only then stop them
+			if strings.Contains(cnt.Names[0], composeProject.Name) && !strings.Contains(cnt.Names[0], "core") {
+				logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
 				ID := cnt.ID
 				compose.StopServiceByID(ctx, dockerCli, ID, logger)
 				compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
+			} else {
+				// Only stop core if the request flag is true
+				if strings.Contains(cnt.Names[0], "core") && cmd.UpdateCore {
+					logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
+					ID := cnt.ID
+					compose.StopServiceByID(ctx, dockerCli, ID, logger)
+					compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
+				}
 			}
 		}
 
-		// Start full build
-		compose.Build(localCtx, dockerCli, &composeProject, logger)
-		compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
-		compose.StartAllServiceContainer(localCtx, dockerCli, &composeProject, logger)
+		if _, err = os.Stat("/supervisor/supervisor_services.yml"); err != nil {
+			// If this is the first run - build all services including core
+			logger.Info("Building core and services")
+			compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
+			compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
+			compose.StartAll(localCtx, dockerCli, &composeProject, logger)
+		} else {
+			// If we receive update request from user, build and update services based on the received request
+			// Note only build if valid cmd is received
+			if cmd.UpdateCore {
+				logger.Info("Building core and services")
+				compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
+				compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
+				compose.StartAll(localCtx, dockerCli, &composeProject, logger)
+			} else if cmd.UpdateServices {
+				logger.Info("Building services")
+				compose.BuildServices(localCtx, dockerCli, &composeProject, logger)
+				compose.CreateServiceContainers(localCtx, dockerCli, &composeProject, logger)
+				compose.StartServices(localCtx, dockerCli, &composeProject, logger)
+			}
+		}
+
 		// Update supervisor
-		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
+		rs.DockerProject = &composeProject
+		rs.AttachContainers()
 		data, _ := yaml.Marshal(&rs.SupervisorServices)
-		ioutil.WriteFile("supervisor_services.yml", data, 0777)
+		ioutil.WriteFile("/supervisor/supervisor_services.yml", data, 0777)
+
+		// Reset update flag
+		cmd.UpdateCore = false
+		cmd.UpdateServices = false
+
 	} else {
-		// File exist
+		// File exist or no update request receives -> Start the process normally
 		// Extract existing info
 		logger.Info("Extracting running services")
 		allContainers, err := compose.ListAllContainers(localCtx, dockerCli, logger)
@@ -188,17 +312,22 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, dockerCli
 			}
 		}
 
-		rs = CreateRosSupervisor(localCtx, gitClient, configFile, &composeProject, logger)
-		rs.DisplayProject()
 		serviceData := make([]SupervisorService, len(rs.SupervisorServices))
-		yfile, _ := ioutil.ReadFile("supervisor_services.yml")
+		yfile, _ := ioutil.ReadFile("/supervisor/supervisor_services.yml")
 		yaml.Unmarshal(yfile, &serviceData)
 		rs.SupervisorServices = serviceData
 	}
-	return rs, logger
+
+	// Remove the cloned project
+	err = os.RemoveAll(projectPath)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Cannot remove project directory with error %v", err))
+	}
+	return rs
 }
 
-func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client, logger *zap.Logger) {
+func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client, cmd *supervisor.SupervisorCommand, logger *zap.Logger) {
+
 	localCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	for {
@@ -247,10 +376,13 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 			ioutil.WriteFile("supervisor_services.yml", data, 0777)
 		} else {
 			logger.Info("Update is not ready.")
+
+			if cmd.UpdateCore || cmd.UpdateServices {
+				break
+			}
 		}
 		// Check once every 5s
 		time.Sleep(10 * time.Second)
-
 	}
 }
 

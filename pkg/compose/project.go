@@ -13,8 +13,9 @@ import (
 )
 
 type Project struct {
-	Name        string          `json:"name"`
-	WorkingDir  string          `json:"working_dir"`
+	Name        string `json:"name"`
+	WorkingDir  string `json:"working_dir"`
+	Core        docker.Service
 	Services    docker.Services `json:"services"`
 	Networks    docker.Networks `json:"networks"`
 	Volumes     docker.Volumes  `json:"volumes"`
@@ -96,7 +97,7 @@ func CreateProject(dockerComposePath, projectPath string, logger *zap.Logger) Pr
 	outputProject.Name = slicedProjectPath[len(slicedProjectPath)-2]
 	outputProject.WorkingDir = projectPath
 
-	outputProject.Services = extractServices(rawData, projectPath, logger)
+	outputProject.Services, outputProject.Core = extractServices(rawData, projectPath, logger)
 	outputProject.Networks = extractNetworks(rawData, logger)
 	outputProject.Volumes = extractVolumes(rawData, logger)
 
@@ -107,84 +108,96 @@ func CreateProject(dockerComposePath, projectPath string, logger *zap.Logger) Pr
 	return outputProject
 }
 
-func extractServices(rawData map[interface{}]interface{}, projectPath string, logger *zap.Logger) docker.Services {
+func extractSingleService(serviceName string, serviceConfig interface{}, projectPath string, logger *zap.Logger) docker.Service {
+	dService := docker.Service{}
+	logger.Info(fmt.Sprintf("Extracting %s", serviceName))
+
+	// Service name
+	dService.Name = serviceName
+
+	// Build options and setups
+	buildOpt := serviceConfig.(map[string]interface{})["build"].(map[string]interface{})
+	dService.BuildOpt.Context = projectPath
+	dService.BuildOpt.Dockerfile = buildOpt["dockerfile"].(string)
+
+	// Container name
+	dService.ContainerName = serviceConfig.(map[string]interface{})["container_name"].(string)
+
+	// Depends On
+	if dependsOn, ok := serviceConfig.(map[string]interface{})["depends_on"].([]interface{}); ok {
+		for _, dp := range dependsOn {
+			// fmt.Printf("%s\n", dp.(string))
+			dService.DependsOn = append(dService.DependsOn, dp.(string))
+		}
+	} else {
+		// Crucial as this is required to sort all services based on dependencies
+		dService.DependsOn = make([]string, 0)
+	}
+
+	// Environment variables
+	if envVarsOpt, ok := serviceConfig.(map[string]interface{})["environment"].([]interface{}); ok {
+		for _, envVars := range envVarsOpt {
+			dService.Environment = append(dService.Environment, envVars.(string))
+		}
+	}
+
+	// Restart
+	if restartOpt, ok := serviceConfig.(map[string]interface{})["restart"].(string); ok {
+		dService.Restart = restartOpt
+	}
+
+	// Networks
+	if networkOpts, ok := serviceConfig.(map[string]interface{})["networks"].(map[string]interface{}); ok {
+		for name, network := range networkOpts {
+			// fmt.Printf("%s:%s\n", name, network.(map[string]interface{})["ipv4_address"].(string))
+			dService.Networks = append(dService.Networks, docker.ServiceNetwork{
+				Name: name,
+				IPv4: network.(map[string]interface{})["ipv4_address"].(string),
+			})
+		}
+	}
+
+	if volumeOpts, ok := serviceConfig.(map[string]interface{})["volumes"].([]interface{}); ok {
+		for _, volume := range volumeOpts {
+			// fmt.Printf("%s\n", volume.(string))
+			fromStringToVolume := func(volStr string) docker.ServiceVolume {
+				separateValues := strings.Split(volStr, ":")
+				if len(separateValues) >= 2 {
+					return docker.ServiceVolume{
+						Type:        docker.VolumeTypeBind,
+						Source:      separateValues[0],
+						Destination: separateValues[1],
+					}
+				}
+				return docker.ServiceVolume{}
+			}
+			dService.Volumes = append(dService.Volumes, fromStringToVolume(volume.(string)))
+		}
+	} else {
+		dService.Volumes = append(dService.Volumes, docker.ServiceVolume{})
+	}
+
+	return dService
+}
+
+func extractServices(rawData map[interface{}]interface{}, projectPath string, logger *zap.Logger) (docker.Services, docker.Service) {
 	logger.Debug("Extracting all services")
 	outputServices := docker.Services{}
+	coreService := docker.Service{}
 	rawServices := rawData["services"].(map[string]interface{})
+
 	for serviceName, serviceConfig := range rawServices {
-		dService := docker.Service{}
-
-		logger.Info(fmt.Sprintf("Extracting %s", serviceName))
-
-		// Service name
-		dService.Name = serviceName
-
-		// Build options and setups
-		buildOpt := serviceConfig.(map[string]interface{})["build"].(map[string]interface{})
-		dService.BuildOpt.Context = projectPath
-		dService.BuildOpt.Dockerfile = buildOpt["dockerfile"].(string)
-
-		// Container name
-		dService.ContainerName = serviceConfig.(map[string]interface{})["container_name"].(string)
-
-		// Depends On
-		if dependsOn, ok := serviceConfig.(map[string]interface{})["depends_on"].([]interface{}); ok {
-			for _, dp := range dependsOn {
-				// fmt.Printf("%s\n", dp.(string))
-				dService.DependsOn = append(dService.DependsOn, dp.(string))
-			}
-		} else {
-			// Crucial as this is required to sort all services based on dependencies
-			dService.DependsOn = make([]string, 0)
+		if serviceName == "core" {
+			logger.Info("Extracting core separately")
+			coreService = extractSingleService(serviceName, serviceConfig, projectPath, logger)
+			continue
 		}
 
-		// Environment variables
-		if envVarsOpt, ok := serviceConfig.(map[string]interface{})["environment"].([]interface{}); ok {
-			for _, envVars := range envVarsOpt {
-				dService.Environment = append(dService.Environment, envVars.(string))
-			}
-		}
-
-		// Restart
-		if restartOpt, ok := serviceConfig.(map[string]interface{})["restart"].(string); ok {
-			dService.Restart = restartOpt
-		}
-
-		// Networks
-		if networkOpts, ok := serviceConfig.(map[string]interface{})["networks"].(map[string]interface{}); ok {
-			for name, network := range networkOpts {
-				// fmt.Printf("%s:%s\n", name, network.(map[string]interface{})["ipv4_address"].(string))
-				dService.Networks = append(dService.Networks, docker.ServiceNetwork{
-					Name: name,
-					IPv4: network.(map[string]interface{})["ipv4_address"].(string),
-				})
-			}
-		}
-
-		if volumeOpts, ok := serviceConfig.(map[string]interface{})["volumes"].([]interface{}); ok {
-			for _, volume := range volumeOpts {
-				// fmt.Printf("%s\n", volume.(string))
-				fromStringToVolume := func(volStr string) docker.ServiceVolume {
-					separateValues := strings.Split(volStr, ":")
-					if len(separateValues) >= 2 {
-						return docker.ServiceVolume{
-							Type:        docker.VolumeTypeBind,
-							Source:      separateValues[0],
-							Destination: separateValues[1],
-						}
-					}
-					return docker.ServiceVolume{}
-				}
-				dService.Volumes = append(dService.Volumes, fromStringToVolume(volume.(string)))
-			}
-		} else {
-			dService.Volumes = append(dService.Volumes, docker.ServiceVolume{})
-		}
-
+		dService := extractSingleService(serviceName, serviceConfig, projectPath, logger)
 		outputServices = append(outputServices, dService)
 	}
 
-	return outputServices
+	return outputServices, coreService
 }
 
 func extractNetworks(rawData map[interface{}]interface{}, logger *zap.Logger) docker.Networks {
