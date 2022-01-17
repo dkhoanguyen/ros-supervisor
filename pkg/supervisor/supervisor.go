@@ -273,11 +273,6 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 		rs.DockerProject = &composeProject
 		rs.AttachContainers()
 		data, _ := yaml.Marshal(&rs.SupervisorServices)
-
-		if _, err = os.Stat("/supervisor/supervisor_services.yml"); err == nil {
-			// If file exists, remove it
-			os.Remove("/supervisor/supervisor_services.yml")
-		}
 		ioutil.WriteFile("/supervisor/supervisor_services.yml", data, 0777)
 
 		// Reset update flag
