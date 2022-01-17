@@ -5,7 +5,7 @@ info:
 
 context:
   use_git_context: true
-  branch: feature/deployment-for-rpi
+  branch: main
   url: https://github.com/dkhoanguyen/ros_docker
 
 # Custom configuration for setting up roscore and other optional features

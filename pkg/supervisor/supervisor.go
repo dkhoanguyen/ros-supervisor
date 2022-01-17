@@ -179,6 +179,7 @@ func Execute() {
 			}
 			continue
 		}
+		// Maybe it's better to use json data instead of this - ie send compose over http POST in json format
 		if utils.FileExists("/supervisor/project/docker-compose.yml") &&
 			utils.FileExists("/supervisor/project/ros-supervisor.yml") {
 			if err != nil {
@@ -196,9 +197,6 @@ func Execute() {
 }
 
 func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supervisor.SupervisorCommand) RosSupervisor {
-	if !cmd.UpdateCore && !cmd.UpdateServices {
-		return RosSupervisor{}
-	}
 
 	localCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -219,8 +217,9 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 	rs, projectPath := CreateRosSupervisor(localCtx, gitClient, configFile, projectDir, logger)
 
 	composeProject := compose.CreateProject(composeFile, projectPath, logger)
+	_, err = os.Stat("/supervisor/supervisor_services.yml")
 
-	if _, err := os.Stat("/supervisor/supervisor_services.yml"); err != nil {
+	if err != nil || cmd.UpdateServices || cmd.UpdateCore {
 		// File does not exist
 		// Check to see if there is any container with the given name is running
 		// If yes then stop and remove all of them to rebuild the project
@@ -230,41 +229,63 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 		if err != nil {
 
 		}
-
 		for _, cnt := range allRunningContainers {
-			if strings.Contains(cnt.Names[0], composeProject.Name) {
+			// If service only then stop them
+			if strings.Contains(cnt.Names[0], composeProject.Name) && !strings.Contains(cnt.Names[0], "core") {
+				logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
 				ID := cnt.ID
 				compose.StopServiceByID(ctx, dockerCli, ID, logger)
 				compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
-			}
-
-			if strings.Contains(cnt.Names[0], "core") && cmd.UpdateCore {
-				ID := cnt.ID
-				compose.StopServiceByID(ctx, dockerCli, ID, logger)
-				compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
+			} else {
+				// Only stop core if the request flag is true
+				if strings.Contains(cnt.Names[0], "core") && cmd.UpdateCore {
+					logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
+					ID := cnt.ID
+					compose.StopServiceByID(ctx, dockerCli, ID, logger)
+					compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
+				}
 			}
 		}
 
-		// Start full build if update_core is true
-		if cmd.UpdateCore {
+		if _, err = os.Stat("/supervisor/supervisor_services.yml"); err != nil {
+			// If this is the first run - build all services including core
 			logger.Info("Building core and services")
 			compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
 			compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
 			compose.StartAll(localCtx, dockerCli, &composeProject, logger)
 		} else {
-			logger.Info("Building services")
-			compose.BuildServices(localCtx, dockerCli, &composeProject, logger)
-			compose.CreateServiceContainers(localCtx, dockerCli, &composeProject, logger)
-			compose.StartServices(localCtx, dockerCli, &composeProject, logger)
+			// If we receive update request from user, build and update services based on the received request
+			// Note only build if valid cmd is received
+			if cmd.UpdateCore {
+				logger.Info("Building core and services")
+				compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
+				compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
+				compose.StartAll(localCtx, dockerCli, &composeProject, logger)
+			} else if cmd.UpdateServices {
+				logger.Info("Building services")
+				compose.BuildServices(localCtx, dockerCli, &composeProject, logger)
+				compose.CreateServiceContainers(localCtx, dockerCli, &composeProject, logger)
+				compose.StartServices(localCtx, dockerCli, &composeProject, logger)
+			}
 		}
 
 		// Update supervisor
 		rs.DockerProject = &composeProject
 		rs.AttachContainers()
 		data, _ := yaml.Marshal(&rs.SupervisorServices)
+
+		if _, err = os.Stat("/supervisor/supervisor_services.yml"); err == nil {
+			// If file exists, remove it
+			os.Remove("/supervisor/supervisor_services.yml")
+		}
 		ioutil.WriteFile("/supervisor/supervisor_services.yml", data, 0777)
+
+		// Reset update flag
+		cmd.UpdateCore = false
+		cmd.UpdateServices = false
+
 	} else {
-		// File exist
+		// File exist or no update request receives -> Start the process normally
 		// Extract existing info
 		logger.Info("Extracting running services")
 		allContainers, err := compose.ListAllContainers(localCtx, dockerCli, logger)
@@ -301,13 +322,16 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 		yaml.Unmarshal(yfile, &serviceData)
 		rs.SupervisorServices = serviceData
 	}
+
+	// Remove the cloned project
+	err = os.RemoveAll(projectPath)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Cannot remove project directory with error %v", err))
+	}
 	return rs
 }
 
 func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient *client.Client, gitClient *gh.Client, cmd *supervisor.SupervisorCommand, logger *zap.Logger) {
-	if !cmd.UpdateCore && !cmd.UpdateServices {
-		return
-	}
 
 	localCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -357,10 +381,13 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 			ioutil.WriteFile("supervisor_services.yml", data, 0777)
 		} else {
 			logger.Info("Update is not ready.")
+
+			if cmd.UpdateCore || cmd.UpdateServices {
+				break
+			}
 		}
 		// Check once every 5s
 		time.Sleep(10 * time.Second)
-
 	}
 }
 
