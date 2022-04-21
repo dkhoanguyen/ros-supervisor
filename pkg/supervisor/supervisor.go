@@ -317,12 +317,6 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 		yaml.Unmarshal(yfile, &serviceData)
 		rs.SupervisorServices = serviceData
 	}
-
-	// Remove the cloned project
-	err = os.RemoveAll(projectPath)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Cannot remove project directory with error %v", err))
-	}
 	return rs
 }
 

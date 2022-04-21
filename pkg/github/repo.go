@@ -82,18 +82,18 @@ func (r *Repo) Clone(directory string, logger *zap.Logger) string {
 			SingleBranch:  true,
 		})
 		if err != nil {
-			logger.Fatal(fmt.Sprintf("Cannot clone %s due to error %s", r.Name, err))
+			logger.Error(fmt.Sprintf("Cannot clone %s due to error %s", r.Name, err))
 		}
 	} else {
 		// Open the repo
 		repo, err := gogit.PlainOpen(directory)
 		if err != nil {
-			logger.Fatal(fmt.Sprintf("Cannot open %s due to error %s", r.Name, err))
+			logger.Error(fmt.Sprintf("Cannot open %s due to error %s", r.Name, err))
 		}
 		// Get the working directory for the repository
 		w, err := repo.Worktree()
 		if err != nil {
-			logger.Fatal(fmt.Sprintf("Cannot get worktree of %s due to error %s", r.Name, err))
+			logger.Warn(fmt.Sprintf("Cannot get worktree of %s due to error %s", r.Name, err))
 		}
 
 		// Pull the latest changes from the origin remote and merge into the current branch
