@@ -97,7 +97,9 @@ func (r *Repo) Clone(directory string, logger *zap.Logger) string {
 		}
 
 		// Pull the latest changes from the origin remote and merge into the current branch
-		err = w.Pull(&gogit.PullOptions{RemoteName: "origin"})
+		err = w.Pull(&gogit.PullOptions{
+			RemoteName: "origin",
+			Force:      true})
 		if err != nil {
 			logger.Warn(fmt.Sprintf("Cannot pull the latest commit of %s due to error %s", r.Name, err))
 		}
@@ -118,5 +120,9 @@ func (r *Repo) GetFullPath(directory string, logger *zap.Logger) string {
 }
 
 func (r *Repo) CloneMain(logger *zap.Logger) {
+
+}
+
+func (r *Repo) PullLatest(logger *zap.Logger) {
 
 }
