@@ -53,16 +53,33 @@ type SupervisorCommand struct {
 	Update bool `json:"update"`
 }
 
+func MakeSupervisor(
+	ctx context.Context,
+	githubClient *gh.Client,
+	configPath string,
+	projectDir string,
+	logger *zap.Logger) (
+	RosSupervisor, string) {
+
+	supervisor := RosSupervisor{}
+	projectPath := ""
+	rawData, err := utils.ReadYaml(configPath)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to read yaml file %s due to error: %s", configPath, err))
+	}
+	supervisor.ProjectCtx = extractProjectContext(rawData, logger)
+	supervisor.SupervisorServices = extractServices(rawData, ctx, githubClient, logger)
+
+	// If use_git_context then get the latest commit and use it as the build context
+	projectPath = prepareProjectDirFromGit(supervisor.ProjectCtx, projectDir, logger)
+	return supervisor, projectPath
+}
+
 func CreateRosSupervisor(ctx context.Context, githubClient *gh.Client, configPath string, projectDir string, logger *zap.Logger) (RosSupervisor, string) {
 	supProject := RosSupervisor{}
-	configFile, err := ioutil.ReadFile(configPath)
+	rawData, err := utils.ReadYaml(configPath)
 	if err != nil {
-		panic(err)
-	}
-	rawData := make(map[interface{}]interface{})
-	err2 := yaml.Unmarshal(configFile, &rawData)
-	if err2 != nil {
-		log.Fatal(err2)
+		logger.Error(fmt.Sprintf("Failed to read yaml file %s due to error: %s", configPath, err))
 	}
 	supProject.ProjectCtx = extractProjectContext(rawData, logger)
 	supProject.SupervisorServices = extractServices(rawData, ctx, githubClient, logger)
@@ -98,7 +115,7 @@ func extractServices(rawData map[interface{}]interface{}, ctx context.Context, g
 				supService.Repos = append(supService.Repos, repo)
 			} else {
 				repo := github.MakeRepository(url, branch, "")
-				repo.GetCurrentLocalCommit(ctx, githubClient, "", logger)
+				repo.GetUpstreamCommitUrl(ctx, githubClient, "", logger)
 				supService.Repos = append(supService.Repos, repo)
 			}
 		}
@@ -112,7 +129,10 @@ func prepareProjectDirFromGit(projectCtx ProjectContext, projectDir string, logg
 	if projectCtx.UseGitContext {
 		// Clone git repo
 		logger.Info("Cloning project dir")
-		projectPath := projectCtx.TargetRepo.Clone(projectDir, logger)
+		projectPath, err := projectCtx.TargetRepo.Clone(projectDir, logger)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to clone project due to error %s", err))
+		}
 		return projectPath
 	} else {
 		return projectCtx.TargetRepo.GetFullPath(projectDir, logger)
@@ -187,8 +207,9 @@ func Execute() {
 			}
 
 			PrepareSupervisor(ctx, &rs, &cmd)
-			StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
+			// StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
 			time.Sleep(2 * time.Second)
+			break
 
 		} else {
 			time.Sleep(2 * time.Second)
@@ -358,7 +379,7 @@ func StartSupervisor(ctx context.Context, supervisor *RosSupervisor, dockeClient
 					}
 
 					for repoIdx := range supervisor.SupervisorServices[idx].Repos {
-						_, err := supervisor.SupervisorServices[idx].Repos[repoIdx].GetCurrentLocalCommit(localCtx, gitClient, "", logger)
+						_, err := supervisor.SupervisorServices[idx].Repos[repoIdx].GetUpstreamCommitUrl(localCtx, gitClient, "", logger)
 						if err != nil {
 
 						}

@@ -1,3 +1,4 @@
+#!/bin/bash
 
 docker cp ros-supervisor.yml ros_supervisor:/supervisor/project/ros-supervisor.yml
 docker cp ./project/docker-compose.yml ros_supervisor:/supervisor/project/docker-compose.yml
