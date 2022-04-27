@@ -128,8 +128,6 @@ func Execute() {
 
 			PrepareSupervisor(ctx, &rs, &cmd)
 			StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
-			time.Sleep(2 * time.Second)
-			break
 
 		} else {
 			time.Sleep(2 * time.Second)
