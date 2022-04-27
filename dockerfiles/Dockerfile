@@ -8,6 +8,7 @@ COPY . /ros-supervisor/
 RUN cd /ros-supervisor/ && go mod download && go build
 
 RUN mkdir /ros_project
+RUN sysctl -w net.ipv4.ping_group_range="0 2147483647"
 
 WORKDIR /
 CMD [ "bash", "-c", "cd /ros-supervisor && ./ros-supervisor" ]
