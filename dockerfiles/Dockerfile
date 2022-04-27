@@ -5,9 +5,12 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends make git
 
 COPY . /ros-supervisor/
-RUN cd /ros-supervisor/ && go mod download && go build
+RUN cd /ros-supervisor/ && go mod download 
+
+RUN cd /ros-supervisor/ && go build
 
 RUN mkdir /ros_project
 
 WORKDIR /
-CMD [ "bash", "-c", "sysctl -w net.ipv4.ping_group_range='0 2147483647' && cd /ros-supervisor && ./ros-supervisor" ]
+CMD [ "bash", "-c", "sysctl -w net.ipv4.ping_group_range='0 2147483647' && \
+                     cd /ros-supervisor && ./ros-supervisor" ]
