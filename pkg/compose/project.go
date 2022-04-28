@@ -174,6 +174,11 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 		}
 	}
 
+	// Privileged
+	if privileged, ok := serviceConfig.(map[string]interface{})["privileged"].(bool); ok {
+		dService.Privileged = privileged
+	}
+
 	// Networks
 	if networkOpts, ok := serviceConfig.(map[string]interface{})["networks"].(map[string]interface{}); ok {
 		for name, network := range networkOpts {
