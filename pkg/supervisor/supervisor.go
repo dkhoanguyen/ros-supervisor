@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/dkhoanguyen/ros-supervisor/internal/env"
@@ -126,8 +127,7 @@ func Execute() {
 			}
 
 			PrepareSupervisor(ctx, &rs, &cmd)
-			// StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
-			break
+			StartSupervisor(ctx, &rs, dockerCli, gitClient, &cmd, logger)
 
 		} else {
 			time.Sleep(2 * time.Second)
@@ -150,112 +150,112 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 	composeFile := envConfig.SupervisorComposeFile
 	configFile := envConfig.SupervisorConfigFile
 
-	// dockerCli := supervisor.DockerCli
+	dockerCli := supervisor.DockerCli
 	gitClient := supervisor.GitCli
 
 	rs, projectPath := MakeSupervisor(localCtx, gitClient, configFile, projectDir, logger)
 
-	compose.CreateProject(composeFile, projectPath, logger)
-	// _, err = os.Stat("/supervisor/supervisor_services.yml")
+	composeProject := compose.CreateProject(composeFile, projectPath, logger)
+	_, err = os.Stat("/supervisor/supervisor_services.yml")
 
-	// if err != nil || cmd.UpdateServices || cmd.UpdateCore {
-	// 	// File does not exist
-	// 	// Check to see if there is any container with the given name is running
-	// 	// If yes then stop and remove all of them to rebuild the project
-	// 	// In the future, for ROS integration we should keep core running, as it is
-	// 	// rarely changed
-	// 	allRunningContainers, err := compose.ListAllContainers(localCtx, dockerCli, logger)
-	// 	if err != nil {
+	if err != nil || cmd.UpdateServices || cmd.UpdateCore {
+		// File does not exist
+		// Check to see if there is any container with the given name is running
+		// If yes then stop and remove all of them to rebuild the project
+		// In the future, for ROS integration we should keep core running, as it is
+		// rarely changed
+		allRunningContainers, err := compose.ListAllContainers(localCtx, dockerCli, logger)
+		if err != nil {
 
-	// 	}
-	// 	for _, cnt := range allRunningContainers {
-	// 		// If service only then stop them
-	// 		if strings.Contains(cnt.Names[0], composeProject.Name) && !strings.Contains(cnt.Names[0], "core") {
-	// 			logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
-	// 			ID := cnt.ID
-	// 			compose.StopServiceByID(ctx, dockerCli, ID, logger)
-	// 			compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
-	// 		} else {
-	// 			// Only stop core if the request flag is true
-	// 			if strings.Contains(cnt.Names[0], "core") && cmd.UpdateCore {
-	// 				logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
-	// 				ID := cnt.ID
-	// 				compose.StopServiceByID(ctx, dockerCli, ID, logger)
-	// 				compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
-	// 			}
-	// 		}
-	// 	}
+		}
+		for _, cnt := range allRunningContainers {
+			// If service only then stop them
+			if strings.Contains(cnt.Names[0], composeProject.Name) && !strings.Contains(cnt.Names[0], "core") {
+				logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
+				ID := cnt.ID
+				compose.StopServiceByID(ctx, dockerCli, ID, logger)
+				compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
+			} else {
+				// Only stop core if the request flag is true
+				if strings.Contains(cnt.Names[0], "core") && cmd.UpdateCore {
+					logger.Info(fmt.Sprintf("Stopping service %s", cnt.Names[0]))
+					ID := cnt.ID
+					compose.StopServiceByID(ctx, dockerCli, ID, logger)
+					compose.RemoveServiceByID(ctx, dockerCli, ID, logger)
+				}
+			}
+		}
 
-	// 	if _, err = os.Stat("/supervisor/supervisor_services.yml"); err != nil {
-	// 		// If this is the first run - build all services including core
-	// 		logger.Info("Building core and services")
-	// 		compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
-	// 		compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
-	// 		compose.StartAll(localCtx, dockerCli, &composeProject, logger)
-	// 	} else {
-	// 		// If we receive update request from user, build and update services based on the received request
-	// 		// Note only build if valid cmd is received
-	// 		if cmd.UpdateCore {
-	// 			logger.Info("Building core and services")
-	// 			compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
-	// 			compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
-	// 			compose.StartAll(localCtx, dockerCli, &composeProject, logger)
-	// 		} else if cmd.UpdateServices {
-	// 			logger.Info("Building services")
-	// 			compose.BuildServices(localCtx, dockerCli, &composeProject, logger)
-	// 			compose.CreateServiceContainers(localCtx, dockerCli, &composeProject, logger)
-	// 			compose.StartServices(localCtx, dockerCli, &composeProject, logger)
-	// 		}
-	// 	}
+		if _, err = os.Stat("/supervisor/supervisor_services.yml"); err != nil {
+			// If this is the first run - build all services including core
+			logger.Info("Building core and services")
+			compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
+			compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
+			compose.StartAll(localCtx, dockerCli, &composeProject, logger)
+		} else {
+			// If we receive update request from user, build and update services based on the received request
+			// Note only build if valid cmd is received
+			if cmd.UpdateCore {
+				logger.Info("Building core and services")
+				compose.BuildAll(localCtx, dockerCli, &composeProject, logger)
+				compose.CreateContainers(localCtx, dockerCli, &composeProject, logger)
+				compose.StartAll(localCtx, dockerCli, &composeProject, logger)
+			} else if cmd.UpdateServices {
+				logger.Info("Building services")
+				compose.BuildServices(localCtx, dockerCli, &composeProject, logger)
+				compose.CreateServiceContainers(localCtx, dockerCli, &composeProject, logger)
+				compose.StartServices(localCtx, dockerCli, &composeProject, logger)
+			}
+		}
 
-	// 	// Update supervisor
-	// 	rs.DockerProject = &composeProject
-	// 	rs.AttachContainers()
-	// 	data, _ := yaml.Marshal(&rs.SupervisorServices)
-	// 	ioutil.WriteFile("/supervisor/supervisor_services.yml", data, 0777)
+		// Update supervisor
+		rs.DockerProject = &composeProject
+		rs.AttachContainers()
+		data, _ := yaml.Marshal(&rs.SupervisorServices)
+		ioutil.WriteFile("/supervisor/supervisor_services.yml", data, 0777)
 
-	// 	// Reset update flag
-	// 	cmd.UpdateCore = false
-	// 	cmd.UpdateServices = false
+		// Reset update flag
+		cmd.UpdateCore = false
+		cmd.UpdateServices = false
 
-	// } else {
-	// 	// File exist or no update request receives -> Start the process normally
-	// 	// Extract existing info
-	// 	logger.Info("Extracting running services")
-	// 	allContainers, err := compose.ListAllContainers(localCtx, dockerCli, logger)
-	// 	if err != nil {
+	} else {
+		// File exist or no update request receives -> Start the process normally
+		// Extract existing info
+		logger.Info("Extracting running services")
+		allContainers, err := compose.ListAllContainers(localCtx, dockerCli, logger)
+		if err != nil {
 
-	// 	}
+		}
 
-	// 	for _, cnt := range allContainers {
-	// 		for idx, service := range composeProject.Services {
-	// 			if composeProject.Name+"_"+service.Name == cnt.Names[0][1:] {
-	// 				composeProject.Services[idx].Container.ID = cnt.ID
-	// 			}
-	// 		}
-	// 	}
-	// 	allImages, err := compose.ListAllImages(localCtx, dockerCli, logger)
-	// 	if err != nil {
+		for _, cnt := range allContainers {
+			for idx, service := range composeProject.Services {
+				if composeProject.Name+"_"+service.Name == cnt.Names[0][1:] {
+					composeProject.Services[idx].Container.ID = cnt.ID
+				}
+			}
+		}
+		allImages, err := compose.ListAllImages(localCtx, dockerCli, logger)
+		if err != nil {
 
-	// 	}
+		}
 
-	// 	for _, img := range allImages {
-	// 		splitString := strings.Split(img.RepoTags[0], ":")
-	// 		imageName := splitString[0]
+		for _, img := range allImages {
+			splitString := strings.Split(img.RepoTags[0], ":")
+			imageName := splitString[0]
 
-	// 		for idx, service := range composeProject.Services {
-	// 			name := composeProject.Name + "_" + service.Name
-	// 			if imageName == name {
-	// 				composeProject.Services[idx].Image.ID = img.ID
-	// 			}
-	// 		}
-	// 	}
+			for idx, service := range composeProject.Services {
+				name := composeProject.Name + "_" + service.Name
+				if imageName == name {
+					composeProject.Services[idx].Image.ID = img.ID
+				}
+			}
+		}
 
-	// 	serviceData := make([]SupervisorService, len(rs.SupervisorServices))
-	// 	yfile, _ := ioutil.ReadFile("/supervisor/supervisor_services.yml")
-	// 	yaml.Unmarshal(yfile, &serviceData)
-	// 	rs.SupervisorServices = serviceData
-	// }
+		serviceData := make([]SupervisorService, len(rs.SupervisorServices))
+		yfile, _ := ioutil.ReadFile("/supervisor/supervisor_services.yml")
+		yaml.Unmarshal(yfile, &serviceData)
+		rs.SupervisorServices = serviceData
+	}
 	return rs
 }
 
