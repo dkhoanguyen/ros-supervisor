@@ -11,4 +11,4 @@ else
     scp docker-compose.yml root@$IP_ADDRESS:. && ssh root@$IP_ADDRESS "docker cp docker-compose.yml ros_supervisor:/supervisor/project/"
 fi
 
-curl http://$IP_ADDRESS:8080/cmd --include --header "Content-Type: application/json" --request "POST" --data '{"update_core": false, "update_services": true}'
+curl http://$IP_ADDRESS:8080/cmd --include --header "Content-Type: application/json" --request "POST" --data '{"update_core": true, "update_services": true}'

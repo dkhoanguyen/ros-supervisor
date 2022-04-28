@@ -160,6 +160,20 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 		dService.Restart = restartOpt
 	}
 
+	// Ports
+	if portOpt, ok := serviceConfig.(map[string]interface{})["ports"].([]interface{}); ok {
+		for _, port := range portOpt {
+			splittedPort := strings.Split(port.(string), ":")
+			portData := docker.ServicePort{
+				Target:   splittedPort[0],
+				Protocol: "tcp",
+				HostIp:   "10.10.88.253",
+				HostPort: splittedPort[1],
+			}
+			dService.Ports = append(dService.Ports, portData)
+		}
+	}
+
 	// Networks
 	if networkOpts, ok := serviceConfig.(map[string]interface{})["networks"].(map[string]interface{}); ok {
 		for name, network := range networkOpts {
