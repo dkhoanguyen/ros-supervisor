@@ -120,6 +120,20 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 	dService.BuildOpt.Context = projectPath
 	dService.BuildOpt.Dockerfile = buildOpt["dockerfile"].(string)
 
+	// Only extract build arg if arg exists
+	if buildArgs, ok := buildOpt["args"].([]interface{}); ok {
+		allBuildArgs := make(map[string]*string)
+		for _, arg := range buildArgs {
+			if _, ok := arg.(string); ok {
+				splittedString := strings.Split(arg.(string), "=")
+				key := splittedString[0]
+				value := arg.(string)[len(key+"="):]
+				allBuildArgs[key] = &value
+			}
+		}
+		dService.BuildOpt.Args = allBuildArgs
+	}
+
 	// Container name
 	dService.ContainerName = serviceConfig.(map[string]interface{})["container_name"].(string)
 
