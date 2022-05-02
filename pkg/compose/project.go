@@ -167,7 +167,7 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 			portData := docker.ServicePort{
 				Target:   splittedPort[0],
 				Protocol: "tcp",
-				HostIp:   "10.10.88.253",
+				HostIp:   "0.0.0.0",
 				HostPort: splittedPort[1],
 			}
 			dService.Ports = append(dService.Ports, portData)
