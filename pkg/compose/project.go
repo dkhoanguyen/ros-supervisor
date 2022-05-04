@@ -141,7 +141,6 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 	// Depends On
 	if dependsOn, ok := serviceConfig.(map[string]interface{})["depends_on"].([]interface{}); ok {
 		for _, dp := range dependsOn {
-			// fmt.Printf("%s\n", dp.(string))
 			dService.DependsOn = append(dService.DependsOn, dp.(string))
 		}
 	} else {

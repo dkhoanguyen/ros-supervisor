@@ -197,6 +197,7 @@ func getPortBinding(targetService *docker.Service) nat.PortMap {
 }
 
 func getResouces(targetService *docker.Service) container.Resources {
+	serviceResources := targetService.Resources
 	deviceMappingList := []container.DeviceMapping{}
 	for _, device := range targetService.Devices {
 		deviceSplit := strings.Split(device, ":")
@@ -218,8 +219,12 @@ func getResouces(targetService *docker.Service) container.Resources {
 
 	resources := container.Resources{
 		CgroupParent:   targetService.CgroupParent,
-		OomKillDisable: &targetService.OomKillDisable,
+		OomKillDisable: &serviceResources.OomKillDisable,
 		Devices:        deviceMappingList,
+		CPUPeriod:      serviceResources.CPUPeriod,
+		CPUQuota:       serviceResources.CPUQuota,
+		CpusetCpus:     serviceResources.CpusetCpus,
+		Memory:         serviceResources.MemoryLimit,
 	}
 
 	return resources
