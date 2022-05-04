@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
@@ -148,6 +149,34 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 		dService.DependsOn = make([]string, 0)
 	}
 
+	// Deploy for resources usage (Only support docker-compose file version 3 onwards)
+	if deployOpt, ok := serviceConfig.(map[string]interface{})["deploy"].(map[string]interface{}); ok {
+		if resourcesOpt, ok := deployOpt["resources"].(map[string]interface{}); ok {
+
+			limitedResources := docker.ServiceResources{}
+			limitOpt := resourcesOpt["limits"].(map[string]interface{})
+			// CPU usage
+			var cpuPeriod float64 = 100000                                   // Default value of 100000
+			cpuQuota, _ := strconv.ParseFloat(limitOpt["cpus"].(string), 64) // Combination of period and quota to determine cpu limitation
+			limitedResources.CPUQuota = int64(cpuQuota * cpuPeriod)
+			limitedResources.CPUPeriod = int64(cpuPeriod)
+
+			// Memory usage
+			memoryInString := limitOpt["memory"].(string)
+			memory, _ := strconv.ParseInt(memoryInString[:len(memoryInString)-1], 10, 64)
+			suffix := string(memoryInString[len(memoryInString)-1])
+			switch {
+			case suffix == "k" || suffix == "K":
+				memory = memory * 1024
+			case suffix == "m" || suffix == "M":
+				memory = memory * 1048576
+			case suffix == "g" || suffix == "G":
+				memory = memory * 1073741824
+			}
+			limitedResources.MemoryLimit = memory
+		}
+	}
+
 	// Environment variables
 	if envVarsOpt, ok := serviceConfig.(map[string]interface{})["environment"].([]interface{}); ok {
 		for _, envVars := range envVarsOpt {
@@ -163,6 +192,7 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 	// Ports
 	if portOpt, ok := serviceConfig.(map[string]interface{})["ports"].([]interface{}); ok {
 		for _, port := range portOpt {
+			// We need to properly split the string to port and host ip address
 			splittedPort := strings.Split(port.(string), ":")
 			portData := docker.ServicePort{
 				Target:   splittedPort[0],
@@ -179,6 +209,11 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 		dService.Privileged = privileged
 	}
 
+	// Tty
+	if tty, ok := serviceConfig.(map[string]interface{})["tty"].(bool); ok {
+		dService.Tty = tty
+	}
+
 	// Networks
 	if networkOpts, ok := serviceConfig.(map[string]interface{})["networks"].(map[string]interface{}); ok {
 		for name, network := range networkOpts {
@@ -190,6 +225,7 @@ func extractSingleService(serviceName string, serviceConfig interface{}, project
 		}
 	}
 
+	// Volumes
 	if volumeOpts, ok := serviceConfig.(map[string]interface{})["volumes"].([]interface{}); ok {
 		for _, volume := range volumeOpts {
 			// fmt.Printf("%s\n", volume.(string))

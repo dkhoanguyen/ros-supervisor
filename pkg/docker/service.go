@@ -22,8 +22,7 @@ type Service struct {
 	Image          Image
 	Container      Container
 	IpcMode        string
-	MemLimit       int64
-	MemSwapLimit   int64
+	Resources      ServiceResources
 	Networks       []ServiceNetwork
 	NetworkMode    string
 	OomKillDisable bool
@@ -61,6 +60,18 @@ type ServicePort struct {
 	Protocol string
 	HostIp   string
 	HostPort string
+}
+
+type ServiceResources struct {
+	CPUPeriod         int64
+	CPUQuota          int64
+	CpusetCpus        string
+	CpusetMems        string
+	MemoryLimit       int64
+	MemoryReservation int64
+	MemorySwap        int64
+	MemorySwappiness  int64
+	OomKillDisable    bool
 }
 
 const (

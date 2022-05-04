@@ -218,7 +218,6 @@ func getResouces(targetService *docker.Service) container.Resources {
 
 	resources := container.Resources{
 		CgroupParent:   targetService.CgroupParent,
-		Memory:         targetService.MemLimit,
 		OomKillDisable: &targetService.OomKillDisable,
 		Devices:        deviceMappingList,
 	}

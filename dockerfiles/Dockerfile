@@ -12,5 +12,4 @@ RUN cd /ros-supervisor/ && go build
 RUN mkdir /ros_project
 
 WORKDIR /
-CMD [ "bash", "-c", "sysctl -w net.ipv4.ping_group_range='0 2147483647' && \
-                     cd /ros-supervisor && ./ros-supervisor" ]
+CMD [ "bash", "-c", "cd /ros-supervisor && ./ros-supervisor" ]
