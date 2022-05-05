@@ -3,6 +3,8 @@ package docker
 import (
 	"strconv"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 type Services []Service
@@ -97,10 +99,56 @@ func GetBuildConfig(rawBuildConfig map[string]interface{}) ServiceBuild {
 	}
 }
 
-func MakeService(config map[string]interface{}, name string) Service {
+func MakeService(
+	config map[string]interface{}, 
+	name string,path string , 
+	logger *zap.Logger) Service {
+
 	output := Service{}
+	logger.Info(fmt.Sprintf("Extracting %s", name))
+	
+	// Service Name
 	output.Name = name
+
+	// COmpose file from a to z (begining to end)
+	// Build options
+	output.BuildOpt = MakeBuildOpt(config,path)
+
+	// Container Name
+	output.ContainerName = MakeContainerName(config)
+
+	// Dependencies
+	output.DependsOn = MakeDependsOn(config)
+
+	// Deployment and Resources
+	output.Resources = MakeDeployResources(config)
+
+	// Environment Variables
+	output.Environment = MakeEnviroment(config)
+
+	// Network
+	output.Networks = MakeNetworks(config)
+
+	// Ports
+	output.Ports = MakePortBinding(config)
+
+	// Privileged 
+	output.Privileged = MakePrivileged(config)
+
+	// Restart 
+	output.Restart = MakeRestartOpt(config)
+
+	// TTY
+	output.Tty = MakeTTY(config)
+
+	// Volumes
+	output.Volumes = MakeVolumes(config)
+
 	return output
+}
+
+func UpdateService() {
+	
 }
 
 func MakeBuildOpt(config map[string]interface{}, path string) ServiceBuild {
@@ -142,8 +190,8 @@ func MakeDependsOn(config map[string]interface{}) []string {
 
 func MakeDeployResources(config map[string]interface{}) ServiceResources {
 	resources := ServiceResources{}
-	if deployOpt, ok := config["deploy"].(map[string]interface{}); ok {
-		if resourcesOpt, ok := deployOpt["resources"].(map[string]interface{}); ok {
+	if deployOpt, exist := config["deploy"].(map[string]interface{}); exist {
+		if resourcesOpt, exist := deployOpt["resources"].(map[string]interface{}); exist {
 			limitOpt := resourcesOpt["limits"].(map[string]interface{})
 			// CPU usage
 			var cpuPeriod float64 = 100000                                   // Default value of 100000
@@ -172,7 +220,7 @@ func MakeDeployResources(config map[string]interface{}) ServiceResources {
 func MakeEnviroment(config map[string]interface{}) []string {
 	env := make([]string, 0)
 	// Environment variables
-	if envVarsOpt, ok := config["environment"].([]interface{}); ok {
+	if envVarsOpt, exist := config["environment"].([]interface{}); exist {
 		for _, envVars := range envVarsOpt {
 			env = append(env, envVars.(string))
 		}
@@ -182,7 +230,7 @@ func MakeEnviroment(config map[string]interface{}) []string {
 
 func MakeRestartOpt(config map[string]interface{}) string {
 	output := ""
-	if restartOpt, ok := config["restart"].(string); ok {
+	if restartOpt, exist := config["restart"].(string); exist {
 		output = restartOpt
 	}
 	return output
@@ -190,7 +238,7 @@ func MakeRestartOpt(config map[string]interface{}) string {
 
 func MakePortBinding(config map[string]interface{}) []ServicePort {
 	ports := make([]ServicePort, 0)
-	if portOpt, ok := config["ports"].([]interface{}); ok {
+	if portOpt, exist := config["ports"].([]interface{}); exist {
 		for _, portData := range portOpt {
 			// We need to properly split the string to port and host ip address
 			splittedPort := strings.Split(portData.(string), ":")
@@ -207,15 +255,49 @@ func MakePortBinding(config map[string]interface{}) []ServicePort {
 }
 
 func MakePrivileged(config map[string]interface{}) bool {
-	if privileged, ok := config["privileged"].(bool); ok {
+	if privileged, exist := config["privileged"].(bool); exist {
 		return privileged
 	}
 	return false
 }
 
 func MakeTTY(config map[string]interface{}) bool {
-	if tty, ok := config["tty"].(bool); ok {
+	if tty, exist := config["tty"].(bool); exist {
 		return tty
 	}
 	return false
+}
+
+func MakeNetworks(config map[string]interface{}) []ServiceNetwork {
+	network := make([]ServiceNetwork, 0)
+	if networkOpts, exist := config["networks"].(map[string]interface{}); exist {
+		for name, networkData := range networkOpts {
+			network = append(network, ServiceNetwork{
+				Name: name,
+				IPv4: networkData.(map[string]interface{})["ipv4_address"].(string),
+			})
+		}
+	}
+	return network
+}
+
+func MakeVolumes(config map[string]interface{}) []ServiceVolume {
+	volumes := make([]ServiceVolume, 0)
+	if volumeOpt, exist := config["volumes"].([]interface{}); exist {
+		fromStringToVolume := func(volStr string) ServiceVolume {
+			separateValues := strings.Split(volStr, ":")
+			if len(separateValues) >= 2 {
+				return ServiceVolume{
+					Type:        VolumeTypeBind,
+					Source:      separateValues[0],
+					Destination: separateValues[1],
+				}
+			}
+			return ServiceVolume{}
+		}
+		for _,volData := volumeOpt {
+			volumeOpt = append(volumeOpt, fromStringToVolume(volData.(string)))
+		}
+	}
+	return volumeOpt
 }
