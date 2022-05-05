@@ -25,8 +25,8 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/containerd/cgroups v1.0.1 // indirect
-	github.com/containerd/containerd v1.5.8 // indirect
-	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/containerd/containerd v1.5.10 // indirect
+	github.com/docker/distribution v2.8.0 // indirect
 	github.com/docker/docker-credential-helpers v0.6.4 // indirect
 	github.com/docker/go v1.5.1-1.0.20160303222718-d30aec9fd63c // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
