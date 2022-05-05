@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Project struct {
+type DockerProject struct {
 	Name        string `json:"name"`
 	WorkingDir  string `json:"working_dir"`
 	Core        docker.Service
@@ -347,4 +347,29 @@ func DisplayProject(project *Project) {
 	for _, volume := range project.Volumes {
 		fmt.Printf("Volume Name: %s\n", volume.Name)
 	}
+}
+
+// Factory Methods
+func MakeDockerProject(composePath, projectPath string, logger *zap.Logger) DockerProject {
+	project := DockerProject{}
+
+	composeFile, err := ioutil.ReadFile(dockerComposePath)
+	if err != nil {
+		logger.Fatal("Unable to read docker-compose file.")
+	}
+	rawData := make(map[interface{}]interface{})
+	err2 := yaml.Unmarshal(composeFile, &rawData)
+	if err2 != nil {
+		logger.Fatal("Unable to extract docker-compose file.")
+	}
+
+	slicedProjectPath := strings.Split(projectPath, "/")
+
+	project.Name = slicedProjectPath[len(slicedProjectPath)-2]
+	project.WorkingDir = projectPath
+	outputProject.ComposeFile = composeFile
+
+	// Make Services, Volumes, and Networks
+
+	return project
 }
