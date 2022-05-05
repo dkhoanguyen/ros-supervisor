@@ -2,9 +2,15 @@
 FROM golang:1.17 AS build
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends make git
+  && apt-get install -y --no-install-recommends make git 
+
+RUN apt-get -yq --no-install-recommends install sqlite3=3.*
 
 RUN mkdir /ros_project
+
+RUN cd /ros_project/ && sqlite3 test.db
+
+VOLUME /ros_project
 
 WORKDIR /
 CMD [ "bash", "-c", "tail -f /dev/null" ]

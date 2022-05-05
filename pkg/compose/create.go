@@ -155,11 +155,9 @@ func prepareVolumeBinding(targetService *docker.Service) []string {
 	for _, volume := range targetService.Volumes {
 		if len(volume.Source) > 0 && len(volume.Destination) > 0 {
 			bindMount := volume.Source + ":" + volume.Destination
-
 			if len(volume.Option) > 0 {
 				bindMount = bindMount + ":" + volume.Option
 			}
-
 			output = append(output, bindMount)
 		}
 	}

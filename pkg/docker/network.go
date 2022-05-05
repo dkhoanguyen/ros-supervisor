@@ -17,3 +17,6 @@ type Network struct {
 }
 
 // IPAMConfig represents IPAM configuration
+func MakeNetwork() {
+
+}
