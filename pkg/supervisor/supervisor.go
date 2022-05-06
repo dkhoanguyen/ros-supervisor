@@ -26,7 +26,7 @@ type RosSupervisor struct {
 	DockerCli          *client.Client
 	GitCli             *gh.Client
 	ProjectCtx         ProjectContext
-	DockerProject      *compose.Project
+	DockerProject      *compose.DockerProject
 	SupervisorServices SupervisorServices
 	ProjectDir         string
 	MonitorTimeout     time.Duration
@@ -155,7 +155,7 @@ func PrepareSupervisor(ctx context.Context, supervisor *RosSupervisor, cmd *supe
 
 	rs, projectPath := MakeSupervisor(localCtx, gitClient, configFile, projectDir, logger)
 
-	compose.CreateProject(composeFile, projectPath, logger)
+	compose.MakeDockerProject(composeFile, projectPath, logger)
 	// _, err = os.Stat("/supervisor/supervisor_services.yml")
 
 	// if err != nil || cmd.UpdateServices || cmd.UpdateCore {
@@ -332,7 +332,7 @@ func (s *RosSupervisor) AttachContainers() {
 
 func (s *RosSupervisor) DisplayProject() {
 	fmt.Printf("DOCKER PROJECT \n")
-	compose.DisplayProject(s.DockerProject)
+	s.DockerProject.DisplayProject()
 	fmt.Printf("SUPERVISOR CONFIG \n")
 	for _, service := range s.SupervisorServices {
 		fmt.Printf("Service Name: %s\n", service.ServiceName)

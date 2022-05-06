@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func StopServices(ctx context.Context, dockerClient *client.Client, project *Project) error {
+func StopServices(ctx context.Context, dockerClient *client.Client, project *DockerProject) error {
 	for idx := range project.Services {
 		err := StopService(ctx, dockerClient, &project.Services[idx])
 		if err != nil {

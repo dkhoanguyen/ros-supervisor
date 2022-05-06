@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartAll(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func StartAll(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 
 	err := StartCore(ctx, dockerClient, project, logger)
 	if err != nil {
@@ -24,7 +24,7 @@ func StartAll(ctx context.Context, dockerClient *client.Client, project *Project
 	return nil
 }
 
-func StartCore(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func StartCore(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 	logger.Info("Starting core container")
 	err := StartSingleServiceContainer(ctx, dockerClient, &project.Core, logger)
 	if err != nil {
@@ -34,7 +34,7 @@ func StartCore(ctx context.Context, dockerClient *client.Client, project *Projec
 	return nil
 }
 
-func StartServices(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func StartServices(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 	logger.Info("Starting all service containers")
 	for idx := range project.Services {
 		err := StartSingleServiceContainer(ctx, dockerClient, &project.Services[idx], logger)

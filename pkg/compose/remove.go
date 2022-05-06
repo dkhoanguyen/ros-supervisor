@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func RemoveServices(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func RemoveServices(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 	for idx := range project.Services {
 		err := RemoveService(ctx, dockerClient, &project.Services[idx], logger)
 		if err != nil {

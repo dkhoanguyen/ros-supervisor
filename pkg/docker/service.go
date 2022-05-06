@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -100,19 +101,19 @@ func GetBuildConfig(rawBuildConfig map[string]interface{}) ServiceBuild {
 }
 
 func MakeService(
-	config map[string]interface{}, 
-	name string,path string , 
+	config map[string]interface{},
+	name string, path string,
 	logger *zap.Logger) Service {
 
 	output := Service{}
 	logger.Info(fmt.Sprintf("Extracting %s", name))
-	
+
 	// Service Name
 	output.Name = name
 
 	// COmpose file from a to z (begining to end)
 	// Build options
-	output.BuildOpt = MakeBuildOpt(config,path)
+	output.BuildOpt = MakeBuildOpt(config, path)
 
 	// Container Name
 	output.ContainerName = MakeContainerName(config)
@@ -132,10 +133,10 @@ func MakeService(
 	// Ports
 	output.Ports = MakePortBinding(config)
 
-	// Privileged 
+	// Privileged
 	output.Privileged = MakePrivileged(config)
 
-	// Restart 
+	// Restart
 	output.Restart = MakeRestartOpt(config)
 
 	// TTY
@@ -148,7 +149,7 @@ func MakeService(
 }
 
 func UpdateService() {
-	
+
 }
 
 func MakeBuildOpt(config map[string]interface{}, path string) ServiceBuild {
@@ -295,9 +296,9 @@ func MakeVolumes(config map[string]interface{}) []ServiceVolume {
 			}
 			return ServiceVolume{}
 		}
-		for _,volData := volumeOpt {
-			volumeOpt = append(volumeOpt, fromStringToVolume(volData.(string)))
+		for _, volData := range volumeOpt {
+			volumes = append(volumes, fromStringToVolume(volData.(string)))
 		}
 	}
-	return volumeOpt
+	return volumes
 }

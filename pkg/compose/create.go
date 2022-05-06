@@ -17,7 +17,7 @@ import (
 )
 
 // Container stuff
-func CreateContainers(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func CreateContainers(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 
 	err := CreateCoreContainer(ctx, dockerClient, project, logger)
 	if err != nil {
@@ -35,7 +35,7 @@ func CreateContainers(ctx context.Context, dockerClient *client.Client, project 
 	return nil
 }
 
-func CreateCoreContainer(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func CreateCoreContainer(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 
 	err := CreateNetwork(ctx, project, dockerClient, true, logger)
 	if err != nil {
@@ -52,7 +52,7 @@ func CreateCoreContainer(ctx context.Context, dockerClient *client.Client, proje
 	return nil
 }
 
-func CreateServiceContainers(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func CreateServiceContainers(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 
 	err := CreateNetwork(ctx, project, dockerClient, false, logger)
 	if err != nil {
@@ -261,7 +261,7 @@ func PrepareNetworkOptions(projectName string, targetNetwork *docker.Network) mo
 	}
 }
 
-func CreateNetwork(ctx context.Context, project *Project, dockerClient *client.Client, forceRecreate bool, logger *zap.Logger) error {
+func CreateNetwork(ctx context.Context, project *DockerProject, dockerClient *client.Client, forceRecreate bool, logger *zap.Logger) error {
 	for idx, network := range project.Networks {
 		networkOpts := PrepareNetworkOptions(project.Name, &network)
 		networkName := network.Name

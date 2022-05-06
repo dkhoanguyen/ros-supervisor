@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func BuildAll(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func BuildAll(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 
 	err := BuildCore(ctx, dockerClient, project, logger)
 	if err != nil {
@@ -31,7 +31,7 @@ func BuildAll(ctx context.Context, dockerClient *client.Client, project *Project
 	return nil
 }
 
-func BuildCore(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func BuildCore(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 	logger.Info("Building core")
 	_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Core, logger)
 	if err != nil {
@@ -41,7 +41,7 @@ func BuildCore(ctx context.Context, dockerClient *client.Client, project *Projec
 	return nil
 }
 
-func BuildServices(ctx context.Context, dockerClient *client.Client, project *Project, logger *zap.Logger) error {
+func BuildServices(ctx context.Context, dockerClient *client.Client, project *DockerProject, logger *zap.Logger) error {
 	logger.Info("Building services")
 	for idx := range project.Services {
 		_, err := BuildSingle(ctx, dockerClient, project.Name, &project.Services[idx], logger)
