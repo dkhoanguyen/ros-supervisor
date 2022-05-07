@@ -13,7 +13,7 @@ type ProjectContext struct {
 	TargetRepo    github.Repo
 }
 
-func MakeProject(rawData map[interface{}]interface{}, logger *zap.Logger) ProjectContext {
+func MakeProjectCtx(rawData map[interface{}]interface{}, logger *zap.Logger) ProjectContext {
 	ctx := ProjectContext{}
 	rawCtx := rawData["context"].(map[interface{}]interface{})
 

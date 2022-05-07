@@ -111,7 +111,7 @@ func (dp *DockerProject) DisplayProject() {
 }
 
 // Factory Methods
-func MakeDockerProject(composePath, projectPath string, logger *zap.Logger) DockerProject {
+func MakeDockerProject(composePath, projectPath string, logger *zap.Logger) *DockerProject {
 	dp := DockerProject{}
 
 	composeFile, err := ioutil.ReadFile(composePath)
@@ -156,5 +156,5 @@ func MakeDockerProject(composePath, projectPath string, logger *zap.Logger) Dock
 	// Reorganise services based on dependencies
 	dp.RestructureServices(logger)
 
-	return dp
+	return &dp
 }

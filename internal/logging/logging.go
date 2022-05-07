@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func Make(config *env.Config) *zap.Logger {
+func MakeLogger(config *env.Config) *zap.Logger {
 
 	// Create log folder if it doesn't exist
 	if _, err := os.Stat(config.LoggingPath); os.IsNotExist(err) {
