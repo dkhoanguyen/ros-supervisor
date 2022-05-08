@@ -46,6 +46,7 @@ func (sp *RosSupervisor) Run(
 		UpdateServices: false,
 	}
 	router := gin.Default()
+	router.SetTrustedProxies(nil)
 
 	router.GET("/health/liveness", health.LivenessGet)
 	router.POST("/cmd", handler.MakeCommand(*ctx, &cmd))
@@ -66,8 +67,9 @@ func (sp *RosSupervisor) Run(
 			utils.FileExists("/supervisor/project/ros-supervisor.yml") {
 
 			sp.ReadDockerProject(ctx, envConfig, logger)
-			sp.UpdateDockerProject(ctx, &cmd, logger)
-			sp.Supervise(ctx, &cmd, logger)
+			break
+			// sp.UpdateDockerProject(ctx, &cmd, logger)
+			// sp.Supervise(ctx, &cmd, logger)
 
 		} else {
 			time.Sleep(2 * time.Second)

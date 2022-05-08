@@ -118,11 +118,17 @@ func MakeService(
 	// Container Name
 	output.ContainerName = MakeContainerName(config)
 
+	// Commands
+	output.Command = MakeCommand(config, "command")
+
 	// Dependencies
 	output.DependsOn = MakeDependsOn(config)
 
 	// Deployment and Resources
 	output.Resources = MakeDeployResources(config)
+
+	// Entrypoint
+	output.EntryPoint = MakeCommand(config, "entrypoint")
 
 	// Environment Variables
 	output.Environment = MakeEnviroment(config)
@@ -177,6 +183,16 @@ func MakeBuildOpt(config map[string]interface{}, path string) ServiceBuild {
 
 func MakeContainerName(config map[string]interface{}) string {
 	return config["container_name"].(string)
+}
+
+func MakeCommand(config map[string]interface{}, cmdType string) ShellCommand {
+	output := make(ShellCommand, 0)
+	if cmdOpt, exist := config[cmdType].([]interface{}); exist {
+		for _, args := range cmdOpt {
+			output = append(output, args.(string))
+		}
+	}
+	return output
 }
 
 func MakeDependsOn(config map[string]interface{}) []string {
