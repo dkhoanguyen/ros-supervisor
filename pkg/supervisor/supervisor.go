@@ -67,9 +67,8 @@ func (sp *RosSupervisor) Run(
 			utils.FileExists("/supervisor/project/ros-supervisor.yml") {
 
 			sp.ReadDockerProject(ctx, envConfig, logger)
-			break
-			// sp.UpdateDockerProject(ctx, &cmd, logger)
-			// sp.Supervise(ctx, &cmd, logger)
+			sp.UpdateDockerProject(ctx, &cmd, logger)
+			sp.Supervise(ctx, &cmd, logger)
 
 		} else {
 			time.Sleep(2 * time.Second)
