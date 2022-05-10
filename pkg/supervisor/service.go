@@ -2,28 +2,30 @@ package supervisor
 
 import (
 	"context"
+	"strings"
 
+	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/github"
 	gh "github.com/google/go-github/github"
 	"go.uber.org/zap"
 )
 
-type SupervisorServices []SupervisorService
-type SupervisorService struct {
-	ServiceName   string
-	ContainerName string
-	ContainerID   string
+type Services []Service
+type Service struct {
+	Name string
+
+	DockerService docker.Service
 	Repos         []github.Repo
 	UpdateReady   bool
 }
 
-func MakeServices(rawData map[interface{}]interface{}, ctx context.Context, githubClient *gh.Client, logger *zap.Logger) SupervisorServices {
-	supServices := SupervisorServices{}
+func MakeServices(rawData map[interface{}]interface{}, ctx context.Context, githubClient *gh.Client, logger *zap.Logger) Services {
+	supServices := []Service{}
 	services := rawData["services"].(map[interface{}]interface{})
 
 	for serviceName, serviceConfig := range services {
-		supService := SupervisorService{}
-		supService.ServiceName = serviceName.(string)
+		supService := Service{}
+		supService.Name = serviceName.(string)
 		repoLists := serviceConfig.([]interface{})
 		for _, repoData := range repoLists {
 			branch := repoData.(map[interface{}]interface{})["branch"].(string)
@@ -42,4 +44,24 @@ func MakeServices(rawData map[interface{}]interface{}, ctx context.Context, gith
 	}
 
 	return supServices
+}
+
+func (srv *Service) IsUpdateReady() bool {
+	for _, repo := range srv.Repos {
+		if repo.IsUpdateReady() {
+			srv.UpdateReady = true
+			return true
+		}
+	}
+	srv.UpdateReady = false
+	return false
+}
+
+func (srv *Service) AttachDockerService(project *docker.DockerProject) {
+	for _, dSrv := range project.Services {
+		if strings.Contains(dSrv.Name, srv.Name) {
+			srv.DockerService = dSrv
+			return
+		}
+	}
 }

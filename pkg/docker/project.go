@@ -1,4 +1,4 @@
-package compose
+package docker
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/docker/docker/client"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -16,12 +15,12 @@ import (
 type DockerProject struct {
 	Name        string `json:"name"`
 	WorkingDir  string `json:"working_dir"`
-	Core        docker.Service
-	Services    docker.Services `json:"services"`
-	Networks    docker.Networks `json:"networks"`
-	Volumes     docker.Volumes  `json:"volumes"`
-	Configs     docker.Configs  `json:"configs"`
-	ComposeFile []byte          `json:"compose_file"`
+	Core        Service
+	Services    Services `json:"services"`
+	Networks    Networks `json:"networks"`
+	Volumes     Volumes  `json:"volumes"`
+	Configs     Configs  `json:"configs"`
+	ComposeFile []byte   `json:"compose_file"`
 }
 
 func (dp *DockerProject) ServiceNames() []string {
@@ -40,19 +39,19 @@ func (dp *DockerProject) NetworkNames() []string {
 	return names
 }
 
-func (dp *DockerProject) GetService(name string) docker.Service {
+func (dp *DockerProject) GetService(name string) Service {
 	for _, service := range dp.Services {
 		if service.Name == name {
 			return service
 		}
 	}
-	return docker.Service{}
+	return Service{}
 }
 
 // Restructure services based on dependencies
 func (dp *DockerProject) RestructureServices(logger *zap.Logger) {
 	logger.Info("Organising services based on dependencies hierarchy")
-	restructureServices := docker.Services{}
+	restructureServices := Services{}
 	numDepends := make([]int, 0)
 	numDepends = append(numDepends, 0)
 	find := func(element int, arr []int) bool {
@@ -140,20 +139,20 @@ func MakeDockerProject(composePath, projectPath string, logger *zap.Logger) *Doc
 	for name, config := range rawServiceData {
 		if name == "core" {
 			logger.Info("Extracting core separately")
-			dp.Core = docker.MakeService(config.(map[string]interface{}),
+			dp.Core = MakeService(config.(map[string]interface{}),
 				name, projectPath, logger)
 			continue
 		}
-		dService := docker.MakeService(config.(map[string]interface{}),
+		dService := MakeService(config.(map[string]interface{}),
 			name, projectPath, logger)
 		dp.Services = append(dp.Services, dService)
 	}
 
 	// Extract Network
-	dp.Networks = docker.MakeNetwork(rawData, logger)
+	dp.Networks = MakeNetwork(rawData, logger)
 
 	// Extract Volumes
-	dp.Volumes = docker.MakeVolume(rawData, logger)
+	dp.Volumes = MakeVolume(rawData, logger)
 
 	// Reorganise services based on dependencies
 	dp.RestructureServices(logger)
@@ -172,7 +171,7 @@ func (p *DockerProject) BuildProjectImages(
 	// Build Core
 	if !excludeCore {
 		name := p.Name + "_" + p.Core.Name
-		img := docker.MakeImage(name, "latest")
+		img := MakeImage(name, "latest")
 		err := img.Build(ctx, dockerCli, &p.Core, logger)
 		if err != nil {
 			// TODO: Resolve error here
@@ -184,7 +183,7 @@ func (p *DockerProject) BuildProjectImages(
 	// Build other services
 	for _, srv := range p.Services {
 		name := p.Name + "_" + srv.Name
-		img := docker.MakeImage(name, "latest")
+		img := MakeImage(name, "latest")
 		err := img.Build(ctx, dockerCli, &srv, logger)
 		if err != nil {
 			// TODO: Resolve error here
@@ -205,7 +204,7 @@ func (p *DockerProject) CreateProjectContainers(
 	// Create Core
 	if !excludeCore {
 		name := p.Name + "_" + p.Core.Name
-		cnt := docker.MakeContainer(name)
+		cnt := MakeContainer(name)
 		net := p.Networks[0]
 		err := cnt.Create(ctx, dockerCli, &p.Core, &net, logger)
 		if err != nil {
@@ -217,7 +216,7 @@ func (p *DockerProject) CreateProjectContainers(
 
 	for _, srv := range p.Services {
 		name := p.Name + "_" + srv.Name
-		cnt := docker.MakeContainer(name)
+		cnt := MakeContainer(name)
 		// TODO: Extract network from all networks
 		net := p.Networks[0]
 		err := cnt.Create(ctx, dockerCli, &srv, &net, logger)
