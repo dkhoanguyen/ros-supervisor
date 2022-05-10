@@ -46,8 +46,9 @@ func MakeServices(rawData map[interface{}]interface{}, ctx context.Context, gith
 	return supServices
 }
 
-func (srv *Service) IsUpdateReady() bool {
+func (srv *Service) IsUpdateReady(ctx context.Context, gitCli *gh.Client, logger *zap.Logger) bool {
 	for _, repo := range srv.Repos {
+		repo.UpdateUpStreamCommit(ctx, gitCli, logger)
 		if repo.IsUpdateReady() {
 			srv.UpdateReady = true
 			return true

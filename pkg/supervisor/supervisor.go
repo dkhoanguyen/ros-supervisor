@@ -231,7 +231,7 @@ func (sp *RosSupervisor) Supervise(
 		for _, srv := range sp.SupervisorServices {
 			if srv.IsUpdateReady() {
 				triggerUpdate = true
-				fmt.Printf("Update for service %s is ready.", srv.Name)
+				fmt.Println("Update for service %s is ready.", srv.Name)
 				break
 			}
 		}
