@@ -87,6 +87,18 @@ func MakeContainer(name string) Container {
 	}
 }
 
+func MakeContainersFromInfo(cntInfo []types.Container) []Container {
+	output := make([]Container, 0)
+	for _, cnt := range cntInfo {
+		container := Container{
+			ID:   cnt.ID,
+			Name: cnt.Names[0],
+		}
+		output = append(output, container)
+	}
+	return output
+}
+
 // ===== CREATE ====== //
 
 func (cnt *Container) Create(
@@ -307,4 +319,18 @@ func ListAllContainers(ctx context.Context, dockerCli *client.Client, logger *za
 		logger.Error(fmt.Sprintf("Unable to list all containers with error : %s", err))
 	}
 	return containers, err
+}
+
+// ======= INSPECT ======= //
+func (cnt *Container) Inspect(
+	ctx context.Context,
+	dockerCli *client.Client,
+	logger *zap.Logger,
+) (types.ContainerJSON, error) {
+	info, err := dockerCli.ContainerInspect(ctx, cnt.ID)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Unable to inspect container with error : %s", err))
+	}
+
+	return info, err
 }

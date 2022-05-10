@@ -1,12 +1,14 @@
 package compose
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"sort"
 	"strings"
 
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
+	"github.com/docker/docker/client"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
@@ -157,4 +159,99 @@ func MakeDockerProject(composePath, projectPath string, logger *zap.Logger) *Doc
 	dp.RestructureServices(logger)
 
 	return &dp
+}
+
+// Build project
+func (p *DockerProject) BuildProjectImages(
+	ctx context.Context,
+	dockerCli *client.Client,
+	excludeCore bool,
+	logger *zap.Logger,
+) error {
+
+	// Build Core
+	if !excludeCore {
+		name := p.Name + "_" + p.Core.Name
+		img := docker.MakeImage(name, "latest")
+		err := img.Build(ctx, dockerCli, &p.Core, logger)
+		if err != nil {
+			// TODO: Resolve error here
+			return err
+		}
+		p.Core.Image = img
+	}
+
+	// Build other services
+	for _, srv := range p.Services {
+		name := p.Name + "_" + srv.Name
+		img := docker.MakeImage(name, "latest")
+		err := img.Build(ctx, dockerCli, &srv, logger)
+		if err != nil {
+			// TODO: Resolve error here
+			return err
+		}
+		srv.Image = img
+	}
+	return nil
+}
+
+func (p *DockerProject) CreateProjectContainers(
+	ctx context.Context,
+	dockerCli *client.Client,
+	excludeCore bool,
+	logger *zap.Logger,
+) error {
+
+	// Create Core
+	if !excludeCore {
+		name := p.Name + "_" + p.Core.Name
+		cnt := docker.MakeContainer(name)
+		net := p.Networks[0]
+		err := cnt.Create(ctx, dockerCli, &p.Core, &net, logger)
+		if err != nil {
+			// TODO: Resolve error here
+			return err
+		}
+		p.Core.Container = cnt
+	}
+
+	for _, srv := range p.Services {
+		name := p.Name + "_" + srv.Name
+		cnt := docker.MakeContainer(name)
+		// TODO: Extract network from all networks
+		net := p.Networks[0]
+		err := cnt.Create(ctx, dockerCli, &srv, &net, logger)
+		if err != nil {
+			// TODO: Resolve error here
+			return err
+		}
+
+		srv.Container = cnt
+	}
+	return nil
+}
+
+func (p *DockerProject) StartProjectContainers(
+	ctx context.Context,
+	dockerCli *client.Client,
+	excludeCore bool,
+	logger *zap.Logger) error {
+
+	if !excludeCore {
+		err := p.Core.Container.Start(ctx, dockerCli, logger)
+		if err != nil {
+			// TODO: Resolve error here
+			return err
+		}
+	}
+
+	for _, srv := range p.Services {
+		// Start Container
+		err := srv.Container.Start(ctx, dockerCli, logger)
+		if err != nil {
+			// TODO: Resolve error here
+			return err
+		}
+	}
+	return nil
 }

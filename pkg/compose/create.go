@@ -132,14 +132,11 @@ func PrepareContainerConfig(targetService *docker.Service) container.Config {
 func PrepareNetworkConfig(targetService *docker.Service, targetNetwork *docker.Network) network.NetworkingConfig {
 	// Inspect network first to get the ID
 
-	// Get aliases
-	aliases := []string{targetService.Name}
-
 	endPointConfig := map[string]*network.EndpointSettings{
 		targetNetwork.Name: {
 			NetworkID: targetNetwork.ID,
 			IPAddress: targetService.Networks[0].IPv4,
-			Aliases:   aliases,
+			Aliases:   []string{targetService.Name},
 			IPAMConfig: &network.EndpointIPAMConfig{
 				IPv4Address: targetService.Networks[0].IPv4,
 			},

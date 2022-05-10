@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/docker/docker/api/types"
 	dockerApiTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -58,7 +59,8 @@ func (ntwk *Network) Create(
 	ctx context.Context,
 	dockerCli *client.Client,
 	forceReCreate bool,
-	logger *zap.Logger) error {
+	logger *zap.Logger,
+) error {
 
 	networkOpts := ntwk.prepareNetworkOptions()
 	networkName := ntwk.Name
@@ -118,4 +120,16 @@ func (ntwk *Network) prepareNetworkOptions() dockerApiTypes.NetworkCreate {
 		IPAM:           &ntwk.Ipam,
 		EnableIPv6:     ntwk.EnableIPv6,
 	}
+}
+
+func (ntwk *Network) Inspect(
+	ctx context.Context,
+	dockerCli *client.Client,
+	logger *zap.Logger,
+) (types.NetworkResource, error) {
+	info, err := dockerCli.NetworkInspect(ctx, ntwk.Name, types.NetworkInspectOptions{})
+	if err != nil {
+		logger.Error(fmt.Sprintf("Unable to inspect network with error : %s", err))
+	}
+	return info, err
 }

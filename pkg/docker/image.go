@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/docker/cli/cli"
 	"github.com/docker/docker/api/types"
@@ -86,6 +87,19 @@ func MakeImage(name string, tag string) Image {
 	}
 }
 
+func MakeImagesFromInfo(imgInfo []types.ImageSummary) []Image {
+	output := make([]Image, 0)
+	for _, info := range imgInfo {
+		splitString := strings.Split(info.RepoTags[0], ":")
+		image := Image{
+			ID:   info.ID,
+			Name: splitString[0],
+		}
+		output = append(output, image)
+	}
+	return output
+}
+
 // LOCAL BUILD CONTEXT
 func prepareLocalBuildContext(service *Service, archiveOpts *archive.TarOptions, logger *zap.Logger) (io.ReadCloser, error) {
 
@@ -140,4 +154,14 @@ func compressBuiltCtx(buildCtx io.ReadCloser) (io.ReadCloser, error) {
 	}()
 
 	return pipeReader, nil
+}
+
+// ===== LIST ====== //
+
+func ListAllImages(ctx context.Context, dockerCli *client.Client, logger *zap.Logger) ([]types.ImageSummary, error) {
+	images, err := dockerCli.ImageList(ctx, types.ImageListOptions{})
+	if err != nil {
+		logger.Error(fmt.Sprintf("Unable to list all images with error : %s", err))
+	}
+	return images, err
 }
