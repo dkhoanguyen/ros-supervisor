@@ -195,6 +195,8 @@ func MakeCommand(config map[string]interface{}, cmdType string) ShellCommand {
 		for _, args := range cmdOpt {
 			output = append(output, args.(string))
 		}
+	} else {
+		return nil
 	}
 	return output
 }

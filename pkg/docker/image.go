@@ -42,7 +42,7 @@ func (img *Image) Build(
 
 	}
 	// TODO: Version as tag
-	buildOpts := prepareImageBuildOptions(service, "latest")
+	buildOpts := prepareImageBuildOptions(img.Name, service, "latest")
 	response, err := dockerCli.ImageBuild(ctx, buildCtx, buildOpts)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("Error: %s", err))
@@ -120,10 +120,10 @@ func prepareLocalBuildContext(service *Service, archiveOpts *archive.TarOptions,
 	return buildCtx, nil
 }
 
-func prepareImageBuildOptions(targetService *Service, version string) types.ImageBuildOptions {
+func prepareImageBuildOptions(name string, targetService *Service, version string) types.ImageBuildOptions {
 	// Prepare tag
 	// TODO: We should tag images with software version - using git commit hash
-	tag := []string{targetService.Name + ":" + "latest"}
+	tag := []string{name + ":" + "latest"}
 	return types.ImageBuildOptions{
 		Tags:           tag,
 		SuppressOutput: false,

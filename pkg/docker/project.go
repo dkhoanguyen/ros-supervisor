@@ -181,7 +181,7 @@ func (p *DockerProject) BuildProjectImages(
 	}
 
 	// Build other services
-	for _, srv := range p.Services {
+	for idx, srv := range p.Services {
 		name := p.Name + "_" + srv.Name
 		img := MakeImage(name, "latest")
 		err := img.Build(ctx, dockerCli, &srv, logger)
@@ -189,7 +189,7 @@ func (p *DockerProject) BuildProjectImages(
 			// TODO: Resolve error here
 			return err
 		}
-		srv.Image = img
+		p.Services[idx].Image = img
 	}
 	return nil
 }
@@ -214,7 +214,7 @@ func (p *DockerProject) CreateProjectContainers(
 		p.Core.Container = cnt
 	}
 
-	for _, srv := range p.Services {
+	for idx, srv := range p.Services {
 		name := p.Name + "_" + srv.Name
 		cnt := MakeContainer(name)
 		// TODO: Extract network from all networks
@@ -225,7 +225,7 @@ func (p *DockerProject) CreateProjectContainers(
 			return err
 		}
 
-		srv.Container = cnt
+		p.Services[idx].Container = cnt
 	}
 	return nil
 }

@@ -55,6 +55,7 @@ func (sp *RosSupervisor) Run(
 	for {
 		// If the supervisor_services does not exist, wait for update signal (which should only trigger once the file is received and placed appropriately)
 		if _, err := os.Stat("/supervisor/project/"); err != nil {
+			logger.Info("/supervisor/project/ dir does not exist. Creating one now ...")
 			err := os.Mkdir("/supervisor/project/", os.ModePerm)
 			if err != nil {
 				logger.Fatal(fmt.Sprintf("%s", err))
@@ -65,11 +66,9 @@ func (sp *RosSupervisor) Run(
 		// Maybe it's better to use json data instead of this - ie send compose over http POST in json format
 		if utils.FileExists("/supervisor/project/docker-compose.yml") &&
 			utils.FileExists("/supervisor/project/ros-supervisor.yml") {
-
 			sp.ReadDockerProject(ctx, envConfig, logger)
 			sp.UpdateDockerProject(ctx, &cmd, logger)
 			sp.Supervise(ctx, &cmd, logger)
-
 		} else {
 			time.Sleep(2 * time.Second)
 		}
@@ -147,22 +146,22 @@ func (sp *RosSupervisor) UpdateDockerProject(
 		if _, err = os.Stat("/supervisor/supervisor_services.yml"); err != nil {
 			// If this is the first run - build all services including core
 			logger.Info("Building core and services")
-			sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, true, logger)
-			sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, logger)
-			sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, true, logger)
+			sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
+			sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, logger)
+			sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
 		} else {
 			// If we receive update request from user, build and update services based on the received request
 			// Note only build if valid cmd is received
 			if cmd.UpdateCore {
 				logger.Info("Building core and services")
-				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, true, logger)
-				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, logger)
-				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, true, logger)
-			} else if cmd.UpdateServices {
-				logger.Info("Building services")
 				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
 				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, logger)
 				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
+			} else if cmd.UpdateServices {
+				logger.Info("Building services")
+				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, true, logger)
+				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, logger)
+				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, true, logger)
 			}
 		}
 		// Update supervisor
@@ -229,9 +228,9 @@ func (sp *RosSupervisor) Supervise(
 	for {
 		triggerUpdate := false
 		for _, srv := range sp.SupervisorServices {
-			if srv.IsUpdateReady() {
+			if srv.IsUpdateReady(localCtx, sp.GitCli, logger) {
 				triggerUpdate = true
-				fmt.Println("Update for service %s is ready.", srv.Name)
+				fmt.Printf("Update for service %s is ready.", srv.Name)
 				break
 			}
 		}
