@@ -1,13 +1,14 @@
+#!/bin/bash
 
-docker cp ros-supervisor.yml ros_supervisor:/supervisor/project/ros-supervisor.yml
-docker cp ./project/docker-compose.yml ros_supervisor:/supervisor/project/docker-compose.yml
+IP_ADDRESS=$1
 
-curl http://172.21.0.2:8080/cmd --include --header "Content-Type: application/json" --request "POST" --data '{"update_core": false, "update_services": true}'
-# curl http://192.168.0.101:8080/cmd --include --header "Content-Type: application/json" --request "POST" --data '{"update_core": false, "update_services": false}'
+if [ "$IP_ADDRESS" = "localhost" ]; then
+    echo "Development"
+    docker cp ros-supervisor.yml ros_supervisor:/supervisor/project/
+    docker cp docker-compose.yml ros_supervisor:/supervisor/project/
+else
+    scp ros-supervisor.yml root@$IP_ADDRESS:. && ssh root@$IP_ADDRESS "docker cp ros-supervisor.yml ros_supervisor:/supervisor/project/"
+    scp docker-compose.yml root@$IP_ADDRESS:. && ssh root@$IP_ADDRESS "docker cp docker-compose.yml ros_supervisor:/supervisor/project/"
+fi
 
-# curl http://172.20.0.2:8080/health/liveness --silent --include --header "Content-Type: application/json" --request "GET"
-# res=$?
-# if test "$res" != "0"; then
-#    echo "the curl command failed with: $res"
-# fi
-# echo "the curl command failed with: $res"
+curl http://$IP_ADDRESS:8080/cmd --include --header "Content-Type: application/json" --request "POST" --data '{"update_core": true, "update_services": true}'

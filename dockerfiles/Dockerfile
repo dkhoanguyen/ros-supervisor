@@ -5,14 +5,11 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends make git
 
 COPY . /ros-supervisor/
-RUN cd /ros-supervisor/ && go mod download && go build
+RUN cd /ros-supervisor/ && go mod download 
+
+RUN cd /ros-supervisor/ && go build
 
 RUN mkdir /ros_project
 
 WORKDIR /
 CMD [ "bash", "-c", "cd /ros-supervisor && ./ros-supervisor" ]
-
-# FROM scratch as bin
-
-# COPY --from=build /ros-supervisor/ros-supervisor .
-# CMD [ "/ros-supervisor" ]
