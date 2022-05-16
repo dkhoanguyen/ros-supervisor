@@ -92,7 +92,7 @@ func MakeContainersFromInfo(cntInfo []types.Container) []Container {
 	for _, cnt := range cntInfo {
 		container := Container{
 			ID:   cnt.ID,
-			Name: cnt.Names[0],
+			Name: cnt.Names[0][1:],
 		}
 		output = append(output, container)
 	}
@@ -165,17 +165,17 @@ func prepareNetworkConfig(service *Service, targetNetwork *Network) network.Netw
 	// Inspect network first to get the ID
 
 	// Get aliases
-	aliases := []string{service.Name}
+	// aliases := []string{service.Name}
 
 	endPointConfig := map[string]*network.EndpointSettings{
-		targetNetwork.Name: {
-			NetworkID: targetNetwork.ID,
-			IPAddress: service.Networks[0].IPv4,
-			Aliases:   aliases,
-			IPAMConfig: &network.EndpointIPAMConfig{
-				IPv4Address: service.Networks[0].IPv4,
-			},
-		},
+		// targetNetwork.Name: {
+		// 	NetworkID: targetNetwork.ID,
+		// 	IPAddress: service.Networks[0].IPv4,
+		// 	Aliases:   aliases,
+		// 	IPAMConfig: &network.EndpointIPAMConfig{
+		// 		IPv4Address: service.Networks[0].IPv4,
+		// 	},
+		// },
 	}
 	return network.NetworkingConfig{
 		EndpointsConfig: endPointConfig,
@@ -267,7 +267,8 @@ func prepareHostConfig(service *Service) container.HostConfig {
 		Binds:         prepareVolumeBinding(service),
 		CapAdd:        service.CapAdd,
 		CapDrop:       service.CapDrop,
-		NetworkMode:   container.NetworkMode(service.NetworkMode),
+		ExtraHosts:    service.ExtraHosts,
+		NetworkMode:   container.NetworkMode("host"),
 		RestartPolicy: getRestartPolicy(service),
 		LogConfig: container.LogConfig{
 			Type: "json-file",

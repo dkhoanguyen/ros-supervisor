@@ -27,6 +27,7 @@ type Service struct {
 	Environment   []string
 	EnvFile       []string
 	Expose        []string
+	ExtraHosts    []string
 	IpcMode       string
 	Resources     ServiceResources
 	Networks      []ServiceNetwork
@@ -136,6 +137,11 @@ func MakeService(
 
 	// Environment Variables
 	output.Environment = MakeEnviroment(config)
+
+	// Extra Hosts
+	output.ExtraHosts = MakeExtraHosts(config)
+	// Default expose host machine
+	output.ExtraHosts = append(output.ExtraHosts, "khoa:172.22.0.1")
 
 	// Network
 	output.Networks = MakeNetworks(config)
@@ -249,6 +255,17 @@ func MakeEnviroment(config map[string]interface{}) []string {
 		}
 	}
 	return env
+}
+
+func MakeExtraHosts(config map[string]interface{}) []string {
+	hosts := make([]string, 0)
+	if extraHostsOpt, exist := config["extra_hosts"].([]interface{}); exist {
+		for _, host := range extraHostsOpt {
+			hosts = append(hosts, host.(string))
+		}
+
+	}
+	return hosts
 }
 
 func MakeRestartOpt(config map[string]interface{}) string {

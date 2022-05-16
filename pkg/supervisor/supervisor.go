@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dkhoanguyen/ros-supervisor/internal/env"
+	"github.com/dkhoanguyen/ros-supervisor/internal/resolvable"
 	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/handlers/health"
@@ -225,6 +226,23 @@ func (sp *RosSupervisor) Supervise(
 
 	localCtx, cancel := context.WithCancel(*ctx)
 	defer cancel()
+
+	// Resolve host
+	// TODO: We should only run this in dev, nightly, uat environments
+	allHosts := make(map[string]resolvable.Host)
+	for _, srv := range sp.DockerProject.Services {
+		host := resolvable.Host{
+			Ip:       "127.0.0.1",
+			Hostname: srv.Hostname,
+		}
+		allHosts[srv.Name] = host
+	}
+	hostPath := resolvable.HostFile{
+		Path: "/tmp/etc/hosts",
+	}
+	hostPath.PrepareFile()
+	hostPath.UpdateHostFile(allHosts)
+
 	for {
 		triggerUpdate := false
 		for _, srv := range sp.SupervisorServices {
@@ -235,6 +253,9 @@ func (sp *RosSupervisor) Supervise(
 			}
 		}
 		// We need a better way of mapping compose services
+		// TODO: Remove the trigger update flag
+		// Monitor each service, if an update is available, only update that image and keep
+		// other intact
 		if triggerUpdate {
 			logger.Info("Update is ready. Performing updates")
 			for idx := range sp.SupervisorServices {
