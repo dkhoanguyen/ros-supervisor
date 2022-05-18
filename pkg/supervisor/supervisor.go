@@ -84,6 +84,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	projectDir := envConfig.SupervisorProjectPath
 	composeFile := envConfig.SupervisorComposeFile
 	configFile := envConfig.SupervisorConfigFile
+	hostmachineName := envConfig.HostMachineName
 
 	rawData, err := utils.ReadYaml(configFile)
 	if err != nil {
@@ -96,7 +97,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	// If use_git_context then get the latest commit and use it as the build context
 	projectPath := sp.ProjectCtx.PrepareContextFromGit(projectDir, logger)
 	sp.ProjectPath = projectPath
-	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, logger)
+	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, hostmachineName, logger)
 }
 
 func (sp *RosSupervisor) UpdateDockerProject(

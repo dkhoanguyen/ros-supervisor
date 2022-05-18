@@ -8,7 +8,7 @@ import (
 )
 
 // TODO: We should only bind mount to 1 hosts file instead of the entire /etc dir
-const pattern = "Custom-ROS-Hostname\n"
+const Pattern = "Custom-ROS-Hostname\n"
 
 type HostFile struct {
 	Path     string
@@ -31,21 +31,21 @@ func (hf *HostFile) PrepareFile() {
 	for scanner.Scan() {
 		hf.allLines = append(hf.allLines, scanner.Text()+"\n")
 	}
-	// Remove lines with known patterns
+	// Remove lines with known Patterns
 	for idx, line := range hf.allLines {
-		if strings.Contains(pattern, line) {
+		if strings.Contains(Pattern, line) {
 			hf.allLines = hf.allLines[:idx]
 			break
 		}
 	}
 
-	hf.allLines = append(hf.allLines, "\n\n"+pattern)
+	hf.allLines = append(hf.allLines, "\n\n"+Pattern)
 }
 
 func (hf *HostFile) CleanUpFile() {
-	// Remove lines with known patterns
+	// Remove lines with known Patterns
 	for idx, line := range hf.allLines {
-		if strings.Contains(line, pattern) {
+		if strings.Contains(line, Pattern) {
 			hf.allLines = hf.allLines[:idx]
 			break
 		}
