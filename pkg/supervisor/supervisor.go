@@ -98,6 +98,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	projectDir := envConfig.SupervisorProjectPath
 	composeFile := envConfig.SupervisorComposeFile
 	configFile := envConfig.SupervisorConfigFile
+	hostmachineName := envConfig.HostMachineName
 
 	rawData, err := utils.ReadYaml(configFile)
 	if err != nil {
