@@ -106,6 +106,7 @@ func (cnt *Container) Create(
 	dockerCli *client.Client,
 	service *Service,
 	network *Network,
+	env string,
 	logger *zap.Logger) error {
 
 	allContainers, err := dockerCli.ContainerList(ctx, dockerApiTypes.ContainerListOptions{
@@ -127,7 +128,7 @@ func (cnt *Container) Create(
 		}
 	}
 
-	containerConfig, networkConfig, hostConfig := prepareContainerCreateOptions(service, network)
+	containerConfig, networkConfig, hostConfig := prepareContainerCreateOptions(service, network, env)
 	container, err := dockerCli.ContainerCreate(ctx, &containerConfig,
 		&hostConfig, &networkConfig, nil, cnt.Name)
 	if err != nil {
@@ -138,15 +139,33 @@ func (cnt *Container) Create(
 	return nil
 }
 
-func prepareContainerCreateOptions(service *Service, network *Network) (container.Config, network.NetworkingConfig, container.HostConfig) {
-	containerConfig := prepareContainerConfig(service)
-	networkConfig := prepareNetworkConfig(service, network)
-	hostConfig := prepareHostConfig(service)
+func prepareContainerCreateOptions(service *Service, network *Network, env string) (container.Config, network.NetworkingConfig, container.HostConfig) {
+	containerConfig := prepareContainerConfig(service, env)
+	networkConfig := prepareNetworkConfig(service, network, env)
+	hostConfig := prepareHostConfig(service, env)
 	return containerConfig, networkConfig, hostConfig
 }
 
-func prepareContainerConfig(service *Service) container.Config {
+func prepareContainerConfig(service *Service, env string) container.Config {
 
+	if env == "nightly" || env == "dev" || env == "uat" {
+		ipIdx := -1
+		rosMasterUriIdx := -1
+		for idx, env_value := range service.Environment {
+			if strings.Contains(env_value, "ROS_IP") {
+				ipIdx = idx
+			}
+			if strings.Contains(env_value, "ROS_MASTER_URI") {
+				rosMasterUriIdx = idx
+			}
+		}
+		if rosMasterUriIdx != -1 {
+			service.Environment = append(service.Environment[:rosMasterUriIdx], service.Environment[rosMasterUriIdx+1:]...)
+		}
+		if ipIdx != -1 {
+			service.Environment = append(service.Environment[:ipIdx], service.Environment[ipIdx+1:]...)
+		}
+	}
 	return container.Config{
 		Hostname:   service.Hostname,
 		Domainname: service.Domainname,
@@ -161,24 +180,33 @@ func prepareContainerConfig(service *Service) container.Config {
 	}
 }
 
-func prepareNetworkConfig(service *Service, targetNetwork *Network) network.NetworkingConfig {
-	// Inspect network first to get the ID
+func prepareNetworkConfig(service *Service, targetNetwork *Network, env string) network.NetworkingConfig {
+	if env == "nightly" || env == "dev" || env == "uat" {
+		// If the current working environment is dev-related
+		// the we fuse the service network with host settings
+		endPointConfig := map[string]*network.EndpointSettings{}
+		return network.NetworkingConfig{
+			EndpointsConfig: endPointConfig,
+		}
+	} else {
+		// Inspect network first to get the ID
 
-	// Get aliases
-	// aliases := []string{service.Name}
+		// Get aliases
+		aliases := []string{service.Name}
 
-	endPointConfig := map[string]*network.EndpointSettings{
-		// targetNetwork.Name: {
-		// 	NetworkID: targetNetwork.ID,
-		// 	IPAddress: service.Networks[0].IPv4,
-		// 	Aliases:   aliases,
-		// 	IPAMConfig: &network.EndpointIPAMConfig{
-		// 		IPv4Address: service.Networks[0].IPv4,
-		// 	},
-		// },
-	}
-	return network.NetworkingConfig{
-		EndpointsConfig: endPointConfig,
+		endPointConfig := map[string]*network.EndpointSettings{
+			targetNetwork.Name: {
+				NetworkID: targetNetwork.ID,
+				IPAddress: service.Networks[0].IPv4,
+				Aliases:   aliases,
+				IPAMConfig: &network.EndpointIPAMConfig{
+					IPv4Address: service.Networks[0].IPv4,
+				},
+			},
+		}
+		return network.NetworkingConfig{
+			EndpointsConfig: endPointConfig,
+		}
 	}
 }
 
@@ -260,7 +288,7 @@ func getResouces(service *Service) container.Resources {
 	return resources
 }
 
-func prepareHostConfig(service *Service) container.HostConfig {
+func prepareHostConfig(service *Service, env string) container.HostConfig {
 	// Prepare binding
 	return container.HostConfig{
 		AutoRemove:    false,

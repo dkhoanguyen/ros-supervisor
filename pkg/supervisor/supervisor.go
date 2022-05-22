@@ -22,6 +22,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	DEVELOPMENT string = "dev"
+	NIGHTLY     string = "nightly"
+	UAT         string = "uat"
+	PRODUCTION  string = "production"
+)
+
+const (
+	ORCHESTRATOR string = "orchestrator"
+	PERFORMER    string = "performer"
+)
+
 type RosSupervisor struct {
 	DockerCli          *client.Client
 	GitCli             *gh.Client
@@ -31,6 +43,8 @@ type RosSupervisor struct {
 	ProjectPath        string
 	MonitorTimeout     time.Duration
 	ConfigFile         []byte
+	Env                string
+	Role               string
 }
 
 type SupervisorCommand struct {
@@ -97,6 +111,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	projectPath := sp.ProjectCtx.PrepareContextFromGit(projectDir, logger)
 	sp.ProjectPath = projectPath
 	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, logger)
+	sp.Env = envConfig.DevEnv
 }
 
 func (sp *RosSupervisor) UpdateDockerProject(
@@ -148,7 +163,7 @@ func (sp *RosSupervisor) UpdateDockerProject(
 			// If this is the first run - build all services including core
 			logger.Info("Building core and services")
 			sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
-			sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, logger)
+			sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, sp.Env, logger)
 			sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
 		} else {
 			// If we receive update request from user, build and update services based on the received request
@@ -156,12 +171,12 @@ func (sp *RosSupervisor) UpdateDockerProject(
 			if cmd.UpdateCore {
 				logger.Info("Building core and services")
 				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
-				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, logger)
+				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, sp.Env, logger)
 				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
 			} else if cmd.UpdateServices {
 				logger.Info("Building services")
 				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, true, logger)
-				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, logger)
+				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, sp.Env, logger)
 				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, true, logger)
 			}
 		}
@@ -280,7 +295,7 @@ func (sp *RosSupervisor) Supervise(
 
 							cnt = docker.MakeContainer(name)
 							net := sp.DockerProject.Networks[0]
-							err = cnt.Create(localCtx, sp.DockerCli, &sp.DockerProject.Services[srvIdx], &net, logger)
+							err = cnt.Create(localCtx, sp.DockerCli, &sp.DockerProject.Services[srvIdx], &net, sp.Env, logger)
 							if err != nil {
 								// TODO: Resolve error here
 							}

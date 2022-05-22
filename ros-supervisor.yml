@@ -1,7 +1,8 @@
 # Master context provides definitions and declarations of a skeleton structure of a ros project
 info:
-  name: ros_docker_test
-  distro: noetic
+  name: ros_docker_test   # name of the project
+  distro: noetic          # ROS distro
+  role: master            # Role of this device
 
 context:
   use_git_context: true

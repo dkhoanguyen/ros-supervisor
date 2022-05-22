@@ -107,7 +107,8 @@ func GetBuildConfig(rawBuildConfig map[string]interface{}) ServiceBuild {
 
 func MakeService(
 	config map[string]interface{},
-	name string, path string,
+	name string,
+	path string,
 	logger *zap.Logger) Service {
 
 	output := Service{}
@@ -140,8 +141,6 @@ func MakeService(
 
 	// Extra Hosts
 	output.ExtraHosts = MakeExtraHosts(config)
-	// Default expose host machine
-	output.ExtraHosts = append(output.ExtraHosts, "khoa:172.22.0.1")
 
 	// Network
 	output.Networks = MakeNetworks(config)

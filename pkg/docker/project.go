@@ -198,6 +198,7 @@ func (p *DockerProject) CreateProjectContainers(
 	ctx context.Context,
 	dockerCli *client.Client,
 	excludeCore bool,
+	env string,
 	logger *zap.Logger,
 ) error {
 
@@ -206,7 +207,7 @@ func (p *DockerProject) CreateProjectContainers(
 		name := p.Name + "_" + p.Core.Name
 		cnt := MakeContainer(name)
 		net := p.Networks[0]
-		err := cnt.Create(ctx, dockerCli, &p.Core, &net, logger)
+		err := cnt.Create(ctx, dockerCli, &p.Core, &net, env, logger)
 		if err != nil {
 			// TODO: Resolve error here
 			return err
@@ -219,7 +220,7 @@ func (p *DockerProject) CreateProjectContainers(
 		cnt := MakeContainer(name)
 		// TODO: Extract network from all networks
 		net := p.Networks[0]
-		err := cnt.Create(ctx, dockerCli, &srv, &net, logger)
+		err := cnt.Create(ctx, dockerCli, &srv, &net, env, logger)
 		if err != nil {
 			// TODO: Resolve error here
 			return err
