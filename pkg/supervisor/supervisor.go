@@ -23,13 +23,6 @@ import (
 )
 
 const (
-	DEVELOPMENT string = "dev"
-	NIGHTLY     string = "nightly"
-	UAT         string = "uat"
-	PRODUCTION  string = "production"
-)
-
-const (
 	ORCHESTRATOR string = "orchestrator"
 	PERFORMER    string = "performer"
 )
@@ -111,7 +104,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	// If use_git_context then get the latest commit and use it as the build context
 	projectPath := sp.ProjectCtx.PrepareContextFromGit(projectDir, logger)
 	sp.ProjectPath = projectPath
-	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, logger)
+	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, hostmachineName, envConfig.DevEnv, logger)
 	sp.Env = envConfig.DevEnv
 }
 
@@ -243,21 +236,22 @@ func (sp *RosSupervisor) Supervise(
 	localCtx, cancel := context.WithCancel(*ctx)
 	defer cancel()
 
-	// Resolve host
-	// TODO: We should only run this in dev, nightly, uat environments
-	allHosts := make(map[string]resolvable.Host)
-	for _, srv := range sp.DockerProject.Services {
-		host := resolvable.Host{
-			Ip:       "127.0.0.1",
-			Hostname: srv.Hostname,
+	// Resolve host - should only be done if the env is not prod
+	if sp.Env != utils.PRODUCTION {
+		allHosts := make(map[string]resolvable.Host)
+		for _, srv := range sp.DockerProject.Services {
+			host := resolvable.Host{
+				Ip:       "127.0.0.1",
+				Hostname: srv.Hostname,
+			}
+			allHosts[srv.Name] = host
 		}
-		allHosts[srv.Name] = host
+		hostPath := resolvable.HostFile{
+			Path: "/tmp/etc/hosts",
+		}
+		hostPath.PrepareFile()
+		hostPath.UpdateHostFile(allHosts)
 	}
-	hostPath := resolvable.HostFile{
-		Path: "/tmp/etc/hosts",
-	}
-	hostPath.PrepareFile()
-	hostPath.UpdateHostFile(allHosts)
 
 	for {
 		triggerUpdate := false
@@ -324,7 +318,6 @@ func (sp *RosSupervisor) Supervise(
 			logger.Info("Update is not ready.")
 
 			if cmd.UpdateCore || cmd.UpdateServices {
-
 				break
 			}
 		}

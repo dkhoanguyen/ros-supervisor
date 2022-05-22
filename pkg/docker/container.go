@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
 	"github.com/docker/docker/api/types"
 	dockerApiTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -181,7 +182,7 @@ func prepareContainerConfig(service *Service, env string) container.Config {
 }
 
 func prepareNetworkConfig(service *Service, targetNetwork *Network, env string) network.NetworkingConfig {
-	if env == "nightly" || env == "dev" || env == "uat" {
+	if env == utils.DEVELOPMENT || env == utils.NIGHTLY || env == utils.UAT {
 		// If the current working environment is dev-related
 		// the we fuse the service network with host settings
 		endPointConfig := map[string]*network.EndpointSettings{}
@@ -290,12 +291,17 @@ func getResouces(service *Service) container.Resources {
 
 func prepareHostConfig(service *Service, env string) container.HostConfig {
 	// Prepare binding
+	extraHost := make([]string, 0)
+	if env == utils.PRODUCTION {
+		extraHost = service.ExtraHosts
+	}
+
 	return container.HostConfig{
 		AutoRemove:    false,
 		Binds:         prepareVolumeBinding(service),
 		CapAdd:        service.CapAdd,
 		CapDrop:       service.CapDrop,
-		ExtraHosts:    service.ExtraHosts,
+		ExtraHosts:    extraHost,
 		NetworkMode:   container.NetworkMode("host"),
 		RestartPolicy: getRestartPolicy(service),
 		LogConfig: container.LogConfig{
