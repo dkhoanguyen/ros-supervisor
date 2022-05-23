@@ -7,13 +7,16 @@ services:
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile.dev
+    environment:
+      - HOSTMACHINE_HOSTNAME=${HOSTNAME}
     privileged: true
     restart: always
     ports:
       - 8080:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/khoa/research/code/github/ros-supervisor:/ros_supervisor
+      - .:/ros_supervisor
+      - /etc/:/tmp/etc/
       - supervisor:/supervisor
     sysctls:
       - net.ipv4.ping_group_range=0 2147483647

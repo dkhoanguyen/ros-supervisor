@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dkhoanguyen/ros-supervisor/internal/env"
+	"github.com/dkhoanguyen/ros-supervisor/internal/resolvable"
 	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/handlers/health"
@@ -21,6 +22,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	ORCHESTRATOR string = "orchestrator"
+	PERFORMER    string = "performer"
+)
+
 type RosSupervisor struct {
 	DockerCli          *client.Client
 	GitCli             *gh.Client
@@ -30,6 +36,8 @@ type RosSupervisor struct {
 	ProjectPath        string
 	MonitorTimeout     time.Duration
 	ConfigFile         []byte
+	Env                string
+	Role               string
 }
 
 type SupervisorCommand struct {
@@ -83,6 +91,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	projectDir := envConfig.SupervisorProjectPath
 	composeFile := envConfig.SupervisorComposeFile
 	configFile := envConfig.SupervisorConfigFile
+	hostmachineName := envConfig.HostMachineName
 
 	rawData, err := utils.ReadYaml(configFile)
 	if err != nil {
@@ -95,7 +104,8 @@ func (sp *RosSupervisor) ReadDockerProject(
 	// If use_git_context then get the latest commit and use it as the build context
 	projectPath := sp.ProjectCtx.PrepareContextFromGit(projectDir, logger)
 	sp.ProjectPath = projectPath
-	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, logger)
+	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, hostmachineName, envConfig.DevEnv, logger)
+	sp.Env = envConfig.DevEnv
 }
 
 func (sp *RosSupervisor) UpdateDockerProject(
@@ -147,7 +157,7 @@ func (sp *RosSupervisor) UpdateDockerProject(
 			// If this is the first run - build all services including core
 			logger.Info("Building core and services")
 			sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
-			sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, logger)
+			sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, sp.Env, logger)
 			sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
 		} else {
 			// If we receive update request from user, build and update services based on the received request
@@ -155,12 +165,12 @@ func (sp *RosSupervisor) UpdateDockerProject(
 			if cmd.UpdateCore {
 				logger.Info("Building core and services")
 				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
-				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, logger)
+				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, sp.Env, logger)
 				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
 			} else if cmd.UpdateServices {
 				logger.Info("Building services")
 				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, true, logger)
-				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, logger)
+				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, sp.Env, logger)
 				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, true, logger)
 			}
 		}
@@ -225,6 +235,24 @@ func (sp *RosSupervisor) Supervise(
 
 	localCtx, cancel := context.WithCancel(*ctx)
 	defer cancel()
+
+	// Resolve host - should only be done if the env is not prod
+	if sp.Env != utils.PRODUCTION {
+		allHosts := make(map[string]resolvable.Host)
+		for _, srv := range sp.DockerProject.Services {
+			host := resolvable.Host{
+				Ip:       "127.0.0.1",
+				Hostname: srv.Hostname,
+			}
+			allHosts[srv.Name] = host
+		}
+		hostPath := resolvable.HostFile{
+			Path: "/tmp/etc/hosts",
+		}
+		hostPath.PrepareFile()
+		hostPath.UpdateHostFile(allHosts)
+	}
+
 	for {
 		triggerUpdate := false
 		for _, srv := range sp.SupervisorServices {
@@ -235,6 +263,9 @@ func (sp *RosSupervisor) Supervise(
 			}
 		}
 		// We need a better way of mapping compose services
+		// TODO: Remove the trigger update flag
+		// Monitor each service, if an update is available, only update that image and keep
+		// other intact
 		if triggerUpdate {
 			logger.Info("Update is ready. Performing updates")
 			for idx := range sp.SupervisorServices {
@@ -259,7 +290,7 @@ func (sp *RosSupervisor) Supervise(
 
 							cnt = docker.MakeContainer(name)
 							net := sp.DockerProject.Networks[0]
-							err = cnt.Create(localCtx, sp.DockerCli, &sp.DockerProject.Services[srvIdx], &net, logger)
+							err = cnt.Create(localCtx, sp.DockerCli, &sp.DockerProject.Services[srvIdx], &net, sp.Env, logger)
 							if err != nil {
 								// TODO: Resolve error here
 							}
@@ -287,7 +318,6 @@ func (sp *RosSupervisor) Supervise(
 			logger.Info("Update is not ready.")
 
 			if cmd.UpdateCore || cmd.UpdateServices {
-
 				break
 			}
 		}

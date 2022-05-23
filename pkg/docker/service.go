@@ -27,6 +27,7 @@ type Service struct {
 	Environment   []string
 	EnvFile       []string
 	Expose        []string
+	ExtraHosts    []string
 	IpcMode       string
 	Resources     ServiceResources
 	Networks      []ServiceNetwork
@@ -106,8 +107,11 @@ func GetBuildConfig(rawBuildConfig map[string]interface{}) ServiceBuild {
 
 func MakeService(
 	config map[string]interface{},
-	name string, path string,
-	logger *zap.Logger) Service {
+	name string,
+	path string,
+	hostname string,
+	logger *zap.Logger,
+) Service {
 
 	output := Service{}
 	logger.Info(fmt.Sprintf("Extracting %s", name))
@@ -136,6 +140,9 @@ func MakeService(
 
 	// Environment Variables
 	output.Environment = MakeEnviroment(config)
+
+	// Extra Hosts
+	output.ExtraHosts = MakeExtraHosts(config, hostname)
 
 	// Network
 	output.Networks = MakeNetworks(config)
@@ -249,6 +256,19 @@ func MakeEnviroment(config map[string]interface{}) []string {
 		}
 	}
 	return env
+}
+
+func MakeExtraHosts(config map[string]interface{}, hostname string) []string {
+	hosts := make([]string, 0)
+	if extraHostsOpt, exist := config["extra_hosts"].([]interface{}); exist {
+		for _, host := range extraHostsOpt {
+			hosts = append(hosts, host.(string))
+		}
+
+	}
+	// Default expose host machine
+	hosts = append(hosts, fmt.Sprintf("%s:127.0.0.1", hostname))
+	return hosts
 }
 
 func MakeRestartOpt(config map[string]interface{}) string {

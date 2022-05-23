@@ -19,6 +19,10 @@ type Config struct {
 
 	LoggingLevel string `env:"LOGGING_LEVEL"`
 	LoggingPath  string `env:"LOGGING_PATH"`
+
+	HostMachineName string `env:"HOSTMACHINE_HOSTNAME"`
+
+	DevEnv string `env:"ENVIRONMENT"`
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {

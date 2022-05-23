@@ -10,6 +10,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	FIRST_PRODUCER string = "first_producer"
+	END_CONSUMER   string = "end_producer"
+	DISTRIBUTOR    string = "distributor"
+)
+
 type Services []Service
 type Service struct {
 	Name string

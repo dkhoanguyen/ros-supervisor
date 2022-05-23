@@ -7,12 +7,15 @@ services:
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile
+    environment:
+      - HOSTMACHINE_HOSTNAME=${HOSTNAME}
     privileged: true
     restart: always
     ports:
       - 8080:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/hosts:/tmp/hosts:rw
       - supervisor:/supervisor
     sysctls:
       - net.ipv4.ping_group_range=0 2147483647
