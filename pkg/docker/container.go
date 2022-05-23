@@ -329,6 +329,7 @@ func (cnt *Container) Start(ctx context.Context, dockerCli *client.Client, logge
 // ====== STOP ====== //
 
 func (cnt *Container) Stop(ctx context.Context, dockerCli *client.Client, logger *zap.Logger) error {
+	logger.Info(fmt.Sprintf("Stopping container %s", cnt.Name))
 	Id := cnt.ID
 	if err := dockerCli.ContainerStop(ctx, Id, nil); err != nil {
 		logger.Error(fmt.Sprintf("Unable to stop container %s: %v", Id, err))
@@ -339,6 +340,7 @@ func (cnt *Container) Stop(ctx context.Context, dockerCli *client.Client, logger
 
 // ====== REMOVE ====== //
 func (cnt *Container) Remove(ctx context.Context, dockerCli *client.Client, logger *zap.Logger) error {
+	logger.Info(fmt.Sprintf("Removing container %s", cnt.Name))
 	Id := cnt.ID
 	if err := dockerCli.ContainerRemove(ctx, Id, types.ContainerRemoveOptions{}); err != nil {
 		logger.Error(fmt.Sprintf("Unable to remove container with error:%s", err))

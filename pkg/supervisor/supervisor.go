@@ -98,14 +98,14 @@ func (sp *RosSupervisor) ReadDockerProject(
 		logger.Error(fmt.Sprintf("Failed to read yaml file %s due to error: %s", configFile, err))
 	}
 
-	sp.ProjectCtx = MakeProjectCtx(rawData, logger)
-	sp.SupervisorServices = MakeServices(rawData, *ctx, sp.GitCli, logger)
-
 	// If use_git_context then get the latest commit and use it as the build context
+	sp.ProjectCtx = MakeProjectCtx(rawData, logger)
 	projectPath := sp.ProjectCtx.PrepareContextFromGit(projectDir, logger)
 	sp.ProjectPath = projectPath
 	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, hostmachineName, envConfig.DevEnv, logger)
 	sp.Env = envConfig.DevEnv
+
+	sp.SupervisorServices = MakeServices(rawData, sp.DockerProject, *ctx, sp.GitCli, logger)
 }
 
 func (sp *RosSupervisor) UpdateDockerProject(
@@ -255,63 +255,49 @@ func (sp *RosSupervisor) Supervise(
 
 	for {
 		triggerUpdate := false
-		for _, srv := range sp.SupervisorServices {
-			if srv.IsUpdateReady(localCtx, sp.GitCli, logger) {
-				triggerUpdate = true
-				fmt.Printf("Update for service %s is ready.", srv.Name)
-				break
-			}
-		}
 		// We need a better way of mapping compose services
 		// TODO: Remove the trigger update flag
 		// Monitor each service, if an update is available, only update that image and keep
 		// other intact
-		if triggerUpdate {
-			logger.Info("Update is ready. Performing updates")
-			for idx := range sp.SupervisorServices {
-				if sp.SupervisorServices[idx].UpdateReady {
-					for srvIdx := range sp.DockerProject.Services {
-						if sp.DockerProject.Services[srvIdx].Name == sp.SupervisorServices[idx].Name {
-							cnt := sp.DockerProject.Services[srvIdx].Container
-							err := cnt.Stop(localCtx, sp.DockerCli, logger)
-							if err != nil {
+		for idx := range sp.SupervisorServices {
+			if sp.SupervisorServices[idx].IsUpdateReady(localCtx, sp.GitCli, logger) {
+				logger.Info(fmt.Sprintf("Update for service %s is ready", sp.SupervisorServices[idx].Name))
+				triggerUpdate = true
+				cnt := sp.SupervisorServices[idx].DockerService.Container
+				err := cnt.Stop(localCtx, sp.DockerCli, logger)
+				if err != nil {
 
-							}
+				}
 
-							err = cnt.Remove(localCtx, sp.DockerCli, logger)
+				err = cnt.Remove(localCtx, sp.DockerCli, logger)
+				name := sp.DockerProject.Name + "_" + sp.SupervisorServices[idx].DockerService.Name
+				img := docker.MakeImage(name, "latest")
+				err = img.Build(localCtx, sp.DockerCli, sp.SupervisorServices[idx].DockerService, logger)
+				if err != nil {
+					// TODO: Resolve error here
+				}
+				sp.SupervisorServices[idx].DockerService.Image = img
 
-							name := sp.DockerProject.Name + "_" + sp.DockerProject.Services[srvIdx].Name
-							img := docker.MakeImage(name, "latest")
-							err = img.Build(localCtx, sp.DockerCli, &sp.DockerProject.Services[srvIdx], logger)
-							if err != nil {
-								// TODO: Resolve error here
-							}
-							sp.DockerProject.Services[srvIdx].Image = img
+				cnt = docker.MakeContainer(name)
+				net := sp.DockerProject.Networks[0]
+				err = cnt.Create(localCtx, sp.DockerCli, sp.SupervisorServices[idx].DockerService, &net, sp.Env, logger)
+				if err != nil {
+					// TODO: Resolve error here
+				}
+				err = cnt.Start(localCtx, sp.DockerCli, logger)
+				if err != nil {
+					// TODO: Resolve error here
+				}
 
-							cnt = docker.MakeContainer(name)
-							net := sp.DockerProject.Networks[0]
-							err = cnt.Create(localCtx, sp.DockerCli, &sp.DockerProject.Services[srvIdx], &net, sp.Env, logger)
-							if err != nil {
-								// TODO: Resolve error here
-							}
-							err = cnt.Start(localCtx, sp.DockerCli, logger)
-							if err != nil {
-								// TODO: Resolve error here
-							}
-							sp.DockerProject.Services[srvIdx].Container = cnt
-							sp.SupervisorServices[idx].UpdateReady = false
-						}
-					}
+				for repoIdx := range sp.SupervisorServices[idx].Repos {
+					_, err := sp.SupervisorServices[idx].Repos[repoIdx].GetUpstreamCommitUrl(localCtx, sp.GitCli, "", logger)
+					if err != nil {
 
-					for repoIdx := range sp.SupervisorServices[idx].Repos {
-						_, err := sp.SupervisorServices[idx].Repos[repoIdx].GetUpstreamCommitUrl(localCtx, sp.GitCli, "", logger)
-						if err != nil {
-
-						}
 					}
 				}
 			}
-
+		}
+		if triggerUpdate {
 			data, _ := yaml.Marshal(&sp.SupervisorServices)
 			ioutil.WriteFile("supervisor_services.yml", data, 0777)
 		} else {
