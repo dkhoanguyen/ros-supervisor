@@ -226,7 +226,7 @@ func prepareVolumeBinding(service *Service) []string {
 }
 
 func getRestartPolicy(service *Service) container.RestartPolicy {
-	var restart container.RestartPolicy
+	restart := container.RestartPolicy{}
 	if service.Restart != "" {
 		split := strings.Split(service.Restart, ":")
 		var attemps int
@@ -296,6 +296,27 @@ func prepareHostConfig(service *Service, env string) container.HostConfig {
 		extraHost = service.ExtraHosts
 	}
 
+	if service.Name == "core" {
+		return container.HostConfig{
+			AutoRemove:    false,
+			Binds:         prepareVolumeBinding(service),
+			CapAdd:        service.CapAdd,
+			CapDrop:       service.CapDrop,
+			ExtraHosts:    extraHost,
+			NetworkMode:   container.NetworkMode("host"),
+			RestartPolicy: getRestartPolicy(service),
+			LogConfig: container.LogConfig{
+				Type: "json-file",
+			},
+			IpcMode:      container.IpcMode(service.IpcMode),
+			PortBindings: getPortBinding(service),
+			Resources:    getResouces(service),
+			Sysctls:      service.Sysctls,
+			Privileged:   service.Privileged,
+		}
+	}
+	// Except for core, other services startup order should be manually controlled by the
+	// supervisor
 	return container.HostConfig{
 		AutoRemove:    false,
 		Binds:         prepareVolumeBinding(service),
@@ -303,7 +324,7 @@ func prepareHostConfig(service *Service, env string) container.HostConfig {
 		CapDrop:       service.CapDrop,
 		ExtraHosts:    extraHost,
 		NetworkMode:   container.NetworkMode("host"),
-		RestartPolicy: getRestartPolicy(service),
+		RestartPolicy: container.RestartPolicy{},
 		LogConfig: container.LogConfig{
 			Type: "json-file",
 		},

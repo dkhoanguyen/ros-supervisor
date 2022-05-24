@@ -18,7 +18,9 @@ const (
 
 type Services []Service
 type Service struct {
-	Name string
+	Name      string
+	Type      string
+	DependsOn []string
 
 	DockerService *docker.Service
 	Repos         []github.Repo
@@ -38,7 +40,7 @@ func MakeServices(
 	for serviceName, serviceConfig := range services {
 		for idx, service := range dockerProject.Services {
 			if strings.Contains(serviceName.(string), service.Name) {
-				supService := MakeService(ctx, serviceConfig,
+				supService := MakeService(ctx, serviceConfig.(map[interface{}]interface{}),
 					&dockerProject.Services[idx], githubClient, logger)
 				supService.Name = serviceName.(string)
 
@@ -52,14 +54,13 @@ func MakeServices(
 
 func MakeService(
 	ctx context.Context,
-	config interface{},
+	config map[interface{}]interface{},
 	dockerService *docker.Service,
 	githubClient *gh.Client,
 	logger *zap.Logger,
 ) Service {
 	service := Service{}
-
-	repoLists := config.([]interface{})
+	repoLists := config["repos"].([]interface{})
 
 	// Repo
 	for _, repoData := range repoLists {
@@ -75,6 +76,8 @@ func MakeService(
 			service.Repos = append(service.Repos, repo)
 		}
 	}
+	// Type
+	service.Type = config["type"].(string)
 
 	// Docker Service
 	service.DockerService = dockerService

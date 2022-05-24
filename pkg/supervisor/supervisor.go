@@ -106,6 +106,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	sp.Env = envConfig.DevEnv
 
 	sp.SupervisorServices = MakeServices(rawData, sp.DockerProject, *ctx, sp.GitCli, logger)
+	sp.DockerProject.DisplayProject()
 }
 
 func (sp *RosSupervisor) UpdateDockerProject(
@@ -223,8 +224,8 @@ func (sp *RosSupervisor) UpdateDockerProject(
 		sp.SupervisorServices = serviceData
 	}
 
-	for _, srv := range sp.SupervisorServices {
-		srv.AttachDockerService(sp.DockerProject)
+	for idx := range sp.SupervisorServices {
+		sp.SupervisorServices[idx].AttachDockerService(sp.DockerProject)
 	}
 }
 
@@ -263,51 +264,22 @@ func (sp *RosSupervisor) Supervise(
 			if sp.SupervisorServices[idx].IsUpdateReady(localCtx, sp.GitCli, logger) {
 				logger.Info(fmt.Sprintf("Update for service %s is ready", sp.SupervisorServices[idx].Name))
 				triggerUpdate = true
-				cnt := sp.SupervisorServices[idx].DockerService.Container
-				err := cnt.Stop(localCtx, sp.DockerCli, logger)
-				if err != nil {
-
-				}
-
-				err = cnt.Remove(localCtx, sp.DockerCli, logger)
-				name := sp.DockerProject.Name + "_" + sp.SupervisorServices[idx].DockerService.Name
-				img := docker.MakeImage(name, "latest")
-				err = img.Build(localCtx, sp.DockerCli, sp.SupervisorServices[idx].DockerService, logger)
-				if err != nil {
-					// TODO: Resolve error here
-				}
-				sp.SupervisorServices[idx].DockerService.Image = img
-
-				cnt = docker.MakeContainer(name)
-				net := sp.DockerProject.Networks[0]
-				err = cnt.Create(localCtx, sp.DockerCli, sp.SupervisorServices[idx].DockerService, &net, sp.Env, logger)
-				if err != nil {
-					// TODO: Resolve error here
-				}
-				err = cnt.Start(localCtx, sp.DockerCli, logger)
-				if err != nil {
-					// TODO: Resolve error here
-				}
-
-				for repoIdx := range sp.SupervisorServices[idx].Repos {
-					_, err := sp.SupervisorServices[idx].Repos[repoIdx].GetUpstreamCommitUrl(localCtx, sp.GitCli, "", logger)
-					if err != nil {
-
-					}
+				sp.UpdateService(localCtx, &sp.SupervisorServices[idx], logger)
+			}
+			if triggerUpdate {
+				data, _ := yaml.Marshal(&sp.SupervisorServices)
+				ioutil.WriteFile("supervisor_services.yml", data, 0777)
+			} else {
+				if cmd.UpdateCore || cmd.UpdateServices {
+					logger.Info("Update signal received")
+					return
 				}
 			}
+			// Check once every 5s
 		}
-		if triggerUpdate {
-			data, _ := yaml.Marshal(&sp.SupervisorServices)
-			ioutil.WriteFile("supervisor_services.yml", data, 0777)
-		} else {
+		if !triggerUpdate {
 			logger.Info("Update is not ready.")
-
-			if cmd.UpdateCore || cmd.UpdateServices {
-				break
-			}
 		}
-		// Check once every 5s
 		time.Sleep(10 * time.Second)
 	}
 }
@@ -319,6 +291,41 @@ func (sp *RosSupervisor) AttachContainers() {
 				// sp.SupervisorServices[idx].ContainerName = service.Container.Name
 				// sp.SupervisorServices[idx].ContainerID = service.Container.ID
 			}
+		}
+	}
+}
+
+func (sp *RosSupervisor) UpdateService(ctx context.Context, service *Service, logger *zap.Logger) {
+	cnt := service.DockerService.Container
+	err := cnt.Stop(ctx, sp.DockerCli, logger)
+	if err != nil {
+
+	}
+
+	err = cnt.Remove(ctx, sp.DockerCli, logger)
+	name := sp.DockerProject.Name + "_" + service.DockerService.Name
+	img := docker.MakeImage(name, "latest")
+	err = img.Build(ctx, sp.DockerCli, service.DockerService, logger)
+	if err != nil {
+		// TODO: Resolve error here
+	}
+	service.DockerService.Image = img
+
+	cnt = docker.MakeContainer(name)
+	net := sp.DockerProject.Networks[0]
+	err = cnt.Create(ctx, sp.DockerCli, service.DockerService, &net, sp.Env, logger)
+	if err != nil {
+		// TODO: Resolve error here
+	}
+	err = cnt.Start(ctx, sp.DockerCli, logger)
+	if err != nil {
+		// TODO: Resolve error here
+	}
+
+	for repoIdx := range service.Repos {
+		_, err := service.Repos[repoIdx].GetUpstreamCommitUrl(ctx, sp.GitCli, "", logger)
+		if err != nil {
+
 		}
 	}
 }
