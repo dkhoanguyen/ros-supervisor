@@ -169,6 +169,22 @@ func UpdateService() {
 
 }
 
+func (srv *Service) Print() {
+	fmt.Printf("Service Name: %s\n", srv.Name)
+	fmt.Printf("Build Context: %s\n", srv.BuildOpt.Context)
+	fmt.Printf("Build Dockerfile: %s\n", srv.BuildOpt.Dockerfile)
+	fmt.Printf("Build ContainerName: %s\n", srv.ContainerName)
+	fmt.Printf("Depends On: %s\n", srv.DependsOn)
+	fmt.Printf("Networks Name: %s\n", srv.Networks[0].Name)
+	fmt.Printf("IPV4: %s\n", srv.Networks[0].IPv4)
+	for _, env := range srv.Environment {
+		fmt.Printf("Env: %s\n", env)
+	}
+	fmt.Printf("Image ID: %s\n", srv.Image.ID)
+	fmt.Printf("Container ID: %s\n", srv.Container.ID)
+	fmt.Printf("=====\n")
+}
+
 func MakeBuildOpt(config map[string]interface{}, path string) ServiceBuild {
 	output := ServiceBuild{}
 	buildOpt := config["build"].(map[string]interface{})

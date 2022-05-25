@@ -49,7 +49,6 @@ func (img *Image) Build(
 	}
 	defer response.Body.Close()
 
-	imageID := ""
 	progBuff := os.Stdout
 	buildBuff := os.Stdout
 	aux := func(msg jsonmessage.JSONMessage) {
@@ -58,11 +57,11 @@ func (img *Image) Build(
 			logger.Error(fmt.Sprintf("Failed to parse aux message: %s", err))
 		} else {
 			logger.Info(fmt.Sprintf("%s", msg.Stream))
+			img.ID = result.ID
 		}
 	}
 
 	// Update image ID
-	img.ID = imageID
 
 	// We need to figure out a way to read message from Message Stream and log those message for debugging build process
 	err = jsonmessage.DisplayJSONMessagesStream(response.Body, buildBuff, progBuff.Fd(), true, aux)
@@ -76,7 +75,6 @@ func (img *Image) Build(
 		}
 		return err
 	}
-
 	return nil
 }
 
@@ -159,7 +157,7 @@ func compressBuiltCtx(buildCtx io.ReadCloser) (io.ReadCloser, error) {
 // ===== LIST ====== //
 
 func ListAllImages(ctx context.Context, dockerCli *client.Client, logger *zap.Logger) ([]types.ImageSummary, error) {
-	images, err := dockerCli.ImageList(ctx, types.ImageListOptions{})
+	images, err := dockerCli.ImageList(ctx, types.ImageListOptions{All: true})
 	if err != nil {
 		logger.Error(fmt.Sprintf("Unable to list all images with error : %s", err))
 	}

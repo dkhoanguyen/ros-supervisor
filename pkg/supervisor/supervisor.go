@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,21 +24,27 @@ import (
 )
 
 const (
-	ORCHESTRATOR string = "orchestrator"
-	PERFORMER    string = "performer"
+	ORCHESTRATOR string = "orchestrator" // Master
+	PERFORMER    string = "performer"    // Slave
 )
 
 type RosSupervisor struct {
-	DockerCli          *client.Client
-	GitCli             *gh.Client
-	ProjectCtx         ProjectContext
-	DockerProject      *docker.DockerProject
+	DockerCli     *client.Client
+	GitCli        *gh.Client
+	ProjectCtx    ProjectContext
+	DockerProject *docker.DockerProject
+
 	SupervisorServices []Service
-	ProjectPath        string
-	MonitorTimeout     time.Duration
-	ConfigFile         []byte
-	Env                string
-	Role               string
+
+	Producers    []*Service
+	Distributors []*Service
+	Consumers    []*Service
+
+	ProjectPath    string
+	MonitorTimeout time.Duration
+	ConfigFile     []byte
+	Env            string
+	Role           string
 }
 
 type SupervisorCommand struct {
@@ -106,7 +113,7 @@ func (sp *RosSupervisor) ReadDockerProject(
 	sp.Env = envConfig.DevEnv
 
 	sp.SupervisorServices = MakeServices(rawData, sp.DockerProject, *ctx, sp.GitCli, logger)
-	sp.DockerProject.DisplayProject()
+	sp.OrganiseServices()
 }
 
 func (sp *RosSupervisor) UpdateDockerProject(
@@ -227,6 +234,7 @@ func (sp *RosSupervisor) UpdateDockerProject(
 	for idx := range sp.SupervisorServices {
 		sp.SupervisorServices[idx].AttachDockerService(sp.DockerProject)
 	}
+	sp.DisplayProject()
 }
 
 func (sp *RosSupervisor) Supervise(
@@ -331,21 +339,88 @@ func (sp *RosSupervisor) UpdateService(ctx context.Context, service *Service, lo
 }
 
 func (sp *RosSupervisor) DisplayProject() {
-	fmt.Printf("DOCKER PROJECT \n")
-	sp.DockerProject.DisplayProject()
+	// fmt.Printf("DOCKER PROJECT \n")
+	// sp.DockerProject.DisplayProject()
 	fmt.Printf("SUPERVISOR CONFIG \n")
-	for _, service := range sp.SupervisorServices {
-		// fmt.Printf("Service Name: %s\n", service.ServiceName)
-		// fmt.Printf("Container Name: %s\n", service.ContainerName)
-		for _, repo := range service.Repos {
-			fmt.Printf("Repo name: %s\n", repo.Name)
-			fmt.Printf("Owner name: %s\n", repo.Owner)
-			fmt.Printf("URL: %s\n", repo.Url)
-			fmt.Printf("Branch name: %s\n", repo.Branch)
-			fmt.Printf("Local Commit: %s\n", repo.CurrentCommit)
-		}
-		fmt.Printf("===== \n")
+	fmt.Printf("PRODUCER\n")
+	for idx := range sp.Producers {
+		sp.Producers[idx].Print()
+		fmt.Printf("==================== \n")
 	}
+	fmt.Printf("DISTRIBUTOR\n")
+	for idx := range sp.Distributors {
+		sp.Distributors[idx].Print()
+		fmt.Printf("==================== \n")
+	}
+	fmt.Printf("CONSUMER\n")
+	for idx := range sp.Consumers {
+		sp.Consumers[idx].Print()
+		fmt.Printf("==================== \n")
+	}
+}
+
+func (sp *RosSupervisor) OrganiseServices() {
+
+	// Categorise by type
+	// Producers
+	sp.Producers = make([]*Service, 0)
+	for idx, service := range sp.SupervisorServices {
+		if service.Type == PRODUCER {
+			sp.Producers = append(sp.Producers, &sp.SupervisorServices[idx])
+		}
+	}
+	sp.Producers = OrganiseByDependencies(sp.Producers)
+
+	// Distributors
+	sp.Distributors = make([]*Service, 0)
+	for idx, service := range sp.SupervisorServices {
+		if service.Type == DISTRIBUTOR {
+			sp.Distributors = append(sp.Distributors, &sp.SupervisorServices[idx])
+		}
+	}
+	sp.Distributors = OrganiseByDependencies(sp.Distributors)
+
+	// Consumers
+	sp.Consumers = make([]*Service, 0)
+	for idx, service := range sp.SupervisorServices {
+		if service.Type == CONSUMER {
+			sp.Consumers = append(sp.Consumers, &sp.SupervisorServices[idx])
+		}
+	}
+	sp.Consumers = OrganiseByDependencies(sp.Consumers)
+}
+
+func OrganiseByDependencies(services []*Service) []*Service {
+	output := make([]*Service, 0)
+	numDepends := make([]int, 0)
+	numDepends = append(numDepends, 0)
+
+	find := func(element int, arr []int) bool {
+		for _, d := range arr {
+			if element == d {
+				return true
+			}
+		}
+		return false
+	}
+
+	for idx := range services {
+		if !find(len(services[idx].DependsOn), numDepends) {
+			numDepends = append(numDepends, len(services[idx].DependsOn))
+		}
+	}
+
+	sort.Ints(numDepends)
+
+	for _, nd := range numDepends {
+		for idx := range services {
+			if len(services[idx].DependsOn) == nd {
+				output = append(output, services[idx])
+			}
+		}
+	}
+
+	return output
 }
 
 func MakeRosSupervisor(

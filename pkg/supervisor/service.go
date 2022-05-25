@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
@@ -11,9 +12,9 @@ import (
 )
 
 const (
-	FIRST_PRODUCER string = "first_producer"
-	END_CONSUMER   string = "end_producer"
-	DISTRIBUTOR    string = "distributor"
+	PRODUCER    string = "producer"
+	CONSUMER    string = "consumer"
+	DISTRIBUTOR string = "distributor"
 )
 
 type Services []Service
@@ -48,7 +49,6 @@ func MakeServices(
 			}
 		}
 	}
-
 	return supServices
 }
 
@@ -79,6 +79,12 @@ func MakeService(
 	// Type
 	service.Type = config["type"].(string)
 
+	// Depends on
+	if dependsOnOpt, exist := config["depends_on"].([]interface{}); exist {
+		for _, dependsOn := range dependsOnOpt {
+			service.DependsOn = append(service.DependsOn, dependsOn.(string))
+		}
+	}
 	// Docker Service
 	service.DockerService = dockerService
 
@@ -104,4 +110,20 @@ func (srv *Service) AttachDockerService(project *docker.DockerProject) {
 			return
 		}
 	}
+}
+
+func (srv *Service) Print() {
+	fmt.Printf("Sup Service Name: %s\n", srv.Name)
+	fmt.Printf("Type: %s\n", srv.Type)
+	fmt.Printf("Depend on: %s\n", srv.DependsOn)
+	for _, repo := range srv.Repos {
+		fmt.Printf("Repo name: %s\n", repo.Name)
+		fmt.Printf("Owner name: %s\n", repo.Owner)
+		fmt.Printf("URL: %s\n", repo.Url)
+		fmt.Printf("Branch name: %s\n", repo.Branch)
+		fmt.Printf("Local Commit: %s\n", repo.CurrentCommit)
+		fmt.Printf("----\n")
+	}
+	fmt.Println("Docker Service:")
+	srv.DockerService.Print()
 }
