@@ -195,15 +195,19 @@ func (sp *RosSupervisor) UpdateDockerProject(
 	} else {
 		// File exist or no update request receives -> Start the process normally
 		// Extract existing info
-		logger.Info("Extracting running services")
-		allRunningCntInfo, err := docker.ListAllContainers(localCtx, sp.DockerCli, logger)
-		allRuningCnt := docker.MakeContainersFromInfo(allRunningCntInfo)
+		// Here supervisor should start each service manaually based on the type and the number of
+		// dependencies
+
+		// logger.Info("Extracting running services")
+		// Get all containers
+		allCntInfo, err := docker.ListAllContainers(localCtx, sp.DockerCli, logger)
+		allCnt := docker.MakeContainersFromInfo(allCntInfo)
 		// TODO: Handle errors
 		if err != nil {
 
 		}
 
-		for _, cnt := range allRuningCnt {
+		for _, cnt := range allCnt {
 			for idx, service := range sp.DockerProject.Services {
 				if sp.DockerProject.Name+"_"+service.Name == cnt.Name {
 					sp.DockerProject.Services[idx].Container = cnt
@@ -225,6 +229,9 @@ func (sp *RosSupervisor) UpdateDockerProject(
 				}
 			}
 		}
+
+		sp.StartServicesByType(localCtx, logger)
+
 		serviceData := make([]Service, len(sp.SupervisorServices))
 		yfile, _ := ioutil.ReadFile("/supervisor/supervisor_services.yml")
 		yaml.Unmarshal(yfile, &serviceData)
@@ -334,6 +341,40 @@ func (sp *RosSupervisor) UpdateService(ctx context.Context, service *Service, lo
 		_, err := service.Repos[repoIdx].GetUpstreamCommitUrl(ctx, sp.GitCli, "", logger)
 		if err != nil {
 
+		}
+	}
+}
+
+func (sp *RosSupervisor) StartServicesByType(ctx context.Context, logger *zap.Logger) {
+	// Start producers
+	for idx := range sp.Producers {
+		if sp.Producers[idx].DockerService.Restart == "always" ||
+			sp.Producers[idx].DockerService.Restart == "unless-stopped" {
+			sp.Producers[idx].DockerService.Container.Start(ctx, sp.DockerCli, logger)
+		}
+
+	}
+
+	// TODO: Wait for all producers to start
+	// TODO: Either handle the start time using a timeout parameter in the config file
+	// or introduce a custom api for the service to notify the supervisor when it thinks
+	// that it is running stably
+
+	// Start distributor
+	for idx := range sp.Distributors {
+		if sp.Distributors[idx].DockerService.Restart == "always" ||
+			sp.Distributors[idx].DockerService.Restart == "unless-stopped" {
+			sp.Distributors[idx].DockerService.Container.Start(ctx, sp.DockerCli, logger)
+		}
+	}
+
+	// Same wait as mentioned above
+
+	// Start consumer
+	for idx := range sp.Consumers {
+		if sp.Consumers[idx].DockerService.Restart == "always" ||
+			sp.Consumers[idx].DockerService.Restart == "unless-stopped" {
+			sp.Consumers[idx].DockerService.Container.Start(ctx, sp.DockerCli, logger)
 		}
 	}
 }

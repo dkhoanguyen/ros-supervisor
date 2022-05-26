@@ -288,7 +288,7 @@ func MakeExtraHosts(config map[string]interface{}, hostname string) []string {
 }
 
 func MakeRestartOpt(config map[string]interface{}) string {
-	output := ""
+	output := "no"
 	if restartOpt, exist := config["restart"].(string); exist {
 		output = restartOpt
 	}
