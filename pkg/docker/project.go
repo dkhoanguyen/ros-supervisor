@@ -49,39 +49,6 @@ func (dp *DockerProject) GetService(name string) Service {
 	return Service{}
 }
 
-// Restructure services based on dependencies
-func (dp *DockerProject) RestructureServices(logger *zap.Logger) {
-	logger.Info("Organising services based on dependencies hierarchy")
-	restructureServices := Services{}
-	numDepends := make([]int, 0)
-	numDepends = append(numDepends, 0)
-	find := func(element int, arr []int) bool {
-		for _, d := range arr {
-			if element == d {
-				return true
-			}
-		}
-		return false
-	}
-	for _, service := range dp.Services {
-		if !find(len(service.DependsOn), numDepends) {
-			numDepends = append(numDepends, len(service.DependsOn))
-		}
-	}
-
-	sort.Ints(numDepends)
-
-	for _, nd := range numDepends {
-		for _, service := range dp.Services {
-			if len(service.DependsOn) == nd {
-				restructureServices = append(restructureServices, service)
-			}
-		}
-	}
-
-	dp.Services = restructureServices
-}
-
 func (dp *DockerProject) DisplayProject() {
 	for _, service := range dp.Services {
 		fmt.Printf("Service Name: %s\n", service.Name)
@@ -163,7 +130,7 @@ func MakeDockerProject(
 	dp.Volumes = MakeVolume(rawData, logger)
 
 	// Reorganise services based on dependencies
-	dp.RestructureServices(logger)
+	RestructureServices(dp.Services, logger)
 
 	return &dp
 }
@@ -262,4 +229,37 @@ func (p *DockerProject) StartProjectContainers(
 		}
 	}
 	return nil
+}
+
+// Restructure services based on dependencies
+func RestructureServices(services Services, logger *zap.Logger) Services {
+	logger.Info("Organising services based on number of dependencies")
+	restructureServices := Services{}
+	numDepends := make([]int, 0)
+	numDepends = append(numDepends, 0)
+	find := func(element int, arr []int) bool {
+		for _, d := range arr {
+			if element == d {
+				return true
+			}
+		}
+		return false
+	}
+	for _, service := range services {
+		if !find(len(service.DependsOn), numDepends) {
+			numDepends = append(numDepends, len(service.DependsOn))
+		}
+	}
+
+	sort.Ints(numDepends)
+
+	for _, nd := range numDepends {
+		for _, service := range services {
+			if len(service.DependsOn) == nd {
+				restructureServices = append(restructureServices, service)
+			}
+		}
+	}
+
+	return restructureServices
 }

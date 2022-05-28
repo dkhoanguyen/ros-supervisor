@@ -226,7 +226,7 @@ func prepareVolumeBinding(service *Service) []string {
 }
 
 func getRestartPolicy(service *Service) container.RestartPolicy {
-	var restart container.RestartPolicy
+	restart := container.RestartPolicy{}
 	if service.Restart != "" {
 		split := strings.Split(service.Restart, ":")
 		var attemps int
@@ -296,6 +296,27 @@ func prepareHostConfig(service *Service, env string) container.HostConfig {
 		extraHost = service.ExtraHosts
 	}
 
+	if service.Name == "core" {
+		return container.HostConfig{
+			AutoRemove:    false,
+			Binds:         prepareVolumeBinding(service),
+			CapAdd:        service.CapAdd,
+			CapDrop:       service.CapDrop,
+			ExtraHosts:    extraHost,
+			NetworkMode:   container.NetworkMode("host"),
+			RestartPolicy: getRestartPolicy(service),
+			LogConfig: container.LogConfig{
+				Type: "json-file",
+			},
+			IpcMode:      container.IpcMode(service.IpcMode),
+			PortBindings: getPortBinding(service),
+			Resources:    getResouces(service),
+			Sysctls:      service.Sysctls,
+			Privileged:   service.Privileged,
+		}
+	}
+	// Except for core, other services startup order should be manually controlled by the
+	// supervisor
 	return container.HostConfig{
 		AutoRemove:    false,
 		Binds:         prepareVolumeBinding(service),
@@ -303,7 +324,7 @@ func prepareHostConfig(service *Service, env string) container.HostConfig {
 		CapDrop:       service.CapDrop,
 		ExtraHosts:    extraHost,
 		NetworkMode:   container.NetworkMode("host"),
-		RestartPolicy: getRestartPolicy(service),
+		RestartPolicy: container.RestartPolicy{},
 		LogConfig: container.LogConfig{
 			Type: "json-file",
 		},
@@ -329,6 +350,7 @@ func (cnt *Container) Start(ctx context.Context, dockerCli *client.Client, logge
 // ====== STOP ====== //
 
 func (cnt *Container) Stop(ctx context.Context, dockerCli *client.Client, logger *zap.Logger) error {
+	logger.Info(fmt.Sprintf("Stopping container %s", cnt.Name))
 	Id := cnt.ID
 	if err := dockerCli.ContainerStop(ctx, Id, nil); err != nil {
 		logger.Error(fmt.Sprintf("Unable to stop container %s: %v", Id, err))
@@ -339,6 +361,7 @@ func (cnt *Container) Stop(ctx context.Context, dockerCli *client.Client, logger
 
 // ====== REMOVE ====== //
 func (cnt *Container) Remove(ctx context.Context, dockerCli *client.Client, logger *zap.Logger) error {
+	logger.Info(fmt.Sprintf("Removing container %s", cnt.Name))
 	Id := cnt.ID
 	if err := dockerCli.ContainerRemove(ctx, Id, types.ContainerRemoveOptions{}); err != nil {
 		logger.Error(fmt.Sprintf("Unable to remove container with error:%s", err))
