@@ -139,34 +139,38 @@ func (sp *RosSupervisor) UpdateDockerProject(
 		// If yes then stop and remove all of them to rebuild the project
 		// In the future, for ROS integration we should keep core running, as it is
 		// rarely changed
+
+		sp.StopRunningCntOfType(localCtx, CONSUMER, logger)
+		sp.StopRunningCntOfType(localCtx, DISTRIBUTOR, logger)
+		sp.StopRunningCntOfType(localCtx, PRODUCER, logger)
+
 		allRunningCntInfo, err := docker.ListAllContainers(localCtx, sp.DockerCli, logger)
 		allRuningCnt := docker.MakeContainersFromInfo(allRunningCntInfo)
-		// TODO: Handles error here
-		if err != nil {
-
-		}
 
 		for _, cnt := range allRuningCnt {
-			// If service only then stop them
-			if strings.Contains(cnt.Name, sp.DockerProject.Name) && !strings.Contains(cnt.Name, "core") {
+			if strings.Contains(cnt.Name, "core") && cmd.UpdateCore {
 				logger.Info(fmt.Sprintf("Stopping service %s", cnt.Name))
 				cnt.Stop(localCtx, sp.DockerCli, logger)
 				cnt.Remove(localCtx, sp.DockerCli, logger)
-			} else {
-				// Only stop core if the request flag is true
-				if strings.Contains(cnt.Name, "core") && cmd.UpdateCore {
-					logger.Info(fmt.Sprintf("Stopping service %s", cnt.Name))
-					cnt.Stop(localCtx, sp.DockerCli, logger)
-					cnt.Remove(localCtx, sp.DockerCli, logger)
-				}
+				break
 			}
 		}
+
 		if _, err = os.Stat("/supervisor/supervisor_services.yml"); err != nil {
 			// If this is the first run - build all services including core
 			logger.Info("Building core and services")
 			sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
 			sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, sp.Env, logger)
-			sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
+
+			// Start Core first
+			err := sp.DockerProject.Core.Container.Start(localCtx, sp.DockerCli, logger)
+			if err != nil {
+				// TODO: Resolve error here
+			}
+
+			// Then start by dependencies
+			sp.StartServicesByType(localCtx, logger)
+
 		} else {
 			// If we receive update request from user, build and update services based on the received request
 			// Note only build if valid cmd is received
@@ -174,12 +178,23 @@ func (sp *RosSupervisor) UpdateDockerProject(
 				logger.Info("Building core and services")
 				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, false, logger)
 				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, false, sp.Env, logger)
-				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, false, logger)
+
+				// Start Core first
+				err := sp.DockerProject.Core.Container.Start(localCtx, sp.DockerCli, logger)
+				if err != nil {
+					// TODO: Resolve error here
+				}
+
+				// Then start by dependencies
+				sp.StartServicesByType(localCtx, logger)
+
 			} else if cmd.UpdateServices {
 				logger.Info("Building services")
 				sp.DockerProject.BuildProjectImages(localCtx, sp.DockerCli, true, logger)
 				sp.DockerProject.CreateProjectContainers(localCtx, sp.DockerCli, true, sp.Env, logger)
-				sp.DockerProject.StartProjectContainers(localCtx, sp.DockerCli, true, logger)
+
+				// Then start by dependencies
+				sp.StartServicesByType(localCtx, logger)
 			}
 		}
 		// Update supervisor
@@ -241,7 +256,7 @@ func (sp *RosSupervisor) UpdateDockerProject(
 	for idx := range sp.SupervisorServices {
 		sp.SupervisorServices[idx].AttachDockerService(sp.DockerProject)
 	}
-	sp.DisplayProject()
+	// sp.DisplayProject()
 }
 
 func (sp *RosSupervisor) Supervise(
@@ -379,6 +394,44 @@ func (sp *RosSupervisor) StartServicesByType(ctx context.Context, logger *zap.Lo
 	}
 }
 
+func (sp *RosSupervisor) StopServicesByType(ctx context.Context, logger *zap.Logger) {
+
+	// Stop consumers first
+	for idx := range sp.Producers {
+		if sp.Producers[idx].DockerService.Restart == "always" ||
+			sp.Producers[idx].DockerService.Restart == "unless-stopped" {
+			sp.Producers[idx].DockerService.Container.Stop(ctx, sp.DockerCli, logger)
+		}
+
+	}
+}
+
+func (sp *RosSupervisor) StopRunningCntOfType(ctx context.Context, srvType string, logger *zap.Logger) {
+	allRunningCntInfo, err := docker.ListAllContainers(ctx, sp.DockerCli, logger)
+	allRuningCnt := docker.MakeContainersFromInfo(allRunningCntInfo)
+	// TODO: Handles error here
+	if err != nil {
+
+	}
+	// We stop all consumers first
+	for _, cnt := range allRuningCnt {
+		// This is a bit inefficient, but once we have a working local db
+		// this should be resolved
+		info, _ := cnt.Inspect(ctx, sp.DockerCli, logger)
+		allEnv := info.Config.Env
+		for _, env := range allEnv {
+			if strings.Contains(env, srvType) {
+				logger.Info(fmt.Sprintf("Stopping service %s", cnt.Name))
+				cnt.Stop(ctx, sp.DockerCli, logger)
+				cnt.Remove(ctx, sp.DockerCli, logger)
+				// We move on to the next container
+				break
+			}
+		}
+	}
+
+}
+
 func (sp *RosSupervisor) DisplayProject() {
 	// fmt.Printf("DOCKER PROJECT \n")
 	// sp.DockerProject.DisplayProject()
@@ -407,6 +460,9 @@ func (sp *RosSupervisor) OrganiseServices() {
 	sp.Producers = make([]*Service, 0)
 	for idx, service := range sp.SupervisorServices {
 		if service.Type == PRODUCER {
+			envType := "SERVICE_TYPE=" + PRODUCER
+			sp.SupervisorServices[idx].DockerService.Environment = append(
+				sp.SupervisorServices[idx].DockerService.Environment, envType)
 			sp.Producers = append(sp.Producers, &sp.SupervisorServices[idx])
 		}
 	}
@@ -416,6 +472,9 @@ func (sp *RosSupervisor) OrganiseServices() {
 	sp.Distributors = make([]*Service, 0)
 	for idx, service := range sp.SupervisorServices {
 		if service.Type == DISTRIBUTOR {
+			envType := "SERVICE_TYPE=" + DISTRIBUTOR
+			sp.SupervisorServices[idx].DockerService.Environment = append(
+				sp.SupervisorServices[idx].DockerService.Environment, envType)
 			sp.Distributors = append(sp.Distributors, &sp.SupervisorServices[idx])
 		}
 	}
@@ -425,6 +484,9 @@ func (sp *RosSupervisor) OrganiseServices() {
 	sp.Consumers = make([]*Service, 0)
 	for idx, service := range sp.SupervisorServices {
 		if service.Type == CONSUMER {
+			envType := "SERVICE_TYPE=" + CONSUMER
+			sp.SupervisorServices[idx].DockerService.Environment = append(
+				sp.SupervisorServices[idx].DockerService.Environment, envType)
 			sp.Consumers = append(sp.Consumers, &sp.SupervisorServices[idx])
 		}
 	}

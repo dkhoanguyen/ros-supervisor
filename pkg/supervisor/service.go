@@ -77,7 +77,11 @@ func MakeService(
 		}
 	}
 	// Type
-	service.Type = config["type"].(string)
+	if typeOpt, exist := config["type"].(string); exist {
+		service.Type = typeOpt
+	} else {
+		service.Type = "producer"
+	}
 
 	// Depends on
 	if dependsOnOpt, exist := config["depends_on"].([]interface{}); exist {
