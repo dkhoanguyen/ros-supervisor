@@ -12,6 +12,7 @@ import (
 	"github.com/dkhoanguyen/ros-supervisor/internal/env"
 	"github.com/dkhoanguyen/ros-supervisor/internal/resolvable"
 	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
+	"github.com/dkhoanguyen/ros-supervisor/pkg/db"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/handlers/health"
 	handler "github.com/dkhoanguyen/ros-supervisor/pkg/handlers/v1/supervisor"
@@ -29,11 +30,12 @@ const (
 )
 
 type RosSupervisor struct {
-	DockerCli     *client.Client
-	GitCli        *gh.Client
-	ProjectCtx    ProjectContext
-	DockerProject *docker.DockerProject
+	DockerCli  *client.Client
+	GitCli     *gh.Client
+	ProjectCtx ProjectContext
+	Db         *db.Database
 
+	DockerProject      *docker.DockerProject
 	SupervisorServices []Service
 
 	Producers    []*Service
@@ -83,7 +85,8 @@ func (sp *RosSupervisor) Run(
 			utils.FileExists("/supervisor/project/ros-supervisor.yml") {
 			sp.ReadDockerProject(ctx, envConfig, logger)
 			sp.UpdateDockerProject(ctx, &cmd, logger)
-			sp.Supervise(ctx, &cmd, logger)
+			break
+			// sp.Supervise(ctx, &cmd, logger)
 		} else {
 			time.Sleep(2 * time.Second)
 		}
@@ -109,6 +112,9 @@ func (sp *RosSupervisor) ReadDockerProject(
 
 	sp.SupervisorServices = MakeServices(configFilePath, sp.DockerProject, *ctx, sp.GitCli, logger)
 	sp.OrganiseServices()
+
+	dtb := db.MakeDatabase("/test.db")
+	sp.Db = &dtb
 }
 
 func (sp *RosSupervisor) UpdateDockerProject(

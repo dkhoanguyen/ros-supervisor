@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/dkhoanguyen/ros-supervisor/pkg/db"
 	"github.com/docker/docker/client"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -99,6 +100,8 @@ func MakeDockerProject(
 		logger.Fatal("Unable to extract docker-compose file.")
 	}
 
+	database := db.MakeDatabase("/test.db")
+
 	slicedProjectPath := strings.Split(projectPath, "/")
 
 	dp.Name = slicedProjectPath[len(slicedProjectPath)-2]
@@ -109,18 +112,29 @@ func MakeDockerProject(
 	// Make Services, Volumes, and Networks
 	// Extracting Core and Services
 	logger.Debug("Extracting all services")
-
 	rawServiceData := rawData["services"].(map[string]interface{})
 	for name, config := range rawServiceData {
 		if name == "core" {
 			logger.Info("Extracting core separately")
 			dp.Core = MakeService(config.(map[string]interface{}),
 				name, projectPath, dp.Hostname, logger)
+			b, err := yaml.Marshal(config)
+			if err != nil {
+				logger.Error("Unable to marshal core")
+			}
+			db.AddService(dp.Core.Name, "0.0.1", b, &database)
 			continue
 		}
 		dService := MakeService(config.(map[string]interface{}),
 			name, projectPath, dp.Hostname, logger)
 		dp.Services = append(dp.Services, dService)
+
+		logger.Info(fmt.Sprintf("Updating service %s to database", dService.Name))
+		b, err := yaml.Marshal(config)
+		if err != nil {
+			logger.Error("Unable to marshal service")
+		}
+		db.AddService(dService.Name, "0.0.1", b, &database)
 	}
 
 	// Extract Network

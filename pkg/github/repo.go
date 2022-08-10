@@ -78,8 +78,10 @@ func (r *Repo) Clone(directory string, logger *zap.Logger) (string, error) {
 
 	// Check if project already exists
 	directory = fmt.Sprintf("%s%s", directory, r.Name)
+	fmt.Println(directory)
 	if _, err := os.Stat(directory); os.IsNotExist(err) {
 		// If not then clone it
+		logger.Info("Project does not exist, cloning it...")
 		pingSuccess := utils.Ping("www.github.com", 3, logger)
 
 		// We should handle cases where there is no internet connectivity
@@ -97,7 +99,7 @@ func (r *Repo) Clone(directory string, logger *zap.Logger) (string, error) {
 			return "", err
 		}
 	} else {
-
+		logger.Info("Project exists")
 		currentCommit := r.GetLocalCommit(directory, logger)
 		upstreamCommit := r.GetUpstreamCommit(directory, logger)
 		currentBranch := r.GetCurrentBranch(directory, logger)
@@ -105,12 +107,14 @@ func (r *Repo) Clone(directory string, logger *zap.Logger) (string, error) {
 
 		// First check branch. If branch is different from the specified branch then reclone
 		if currentBranch == "" || currentCommit != r.Branch {
+			logger.Info("Different branch. Reclone with correct branch")
 			reclone = true
 		}
 
 		if !reclone {
 			// Then compare current commit and upstream commit. If they are different then reclone
 			if currentCommit != upstreamCommit || currentCommit == "" {
+				logger.Info("Different commit. Reclone with the latest upstream commit")
 				reclone = true
 			}
 		}
