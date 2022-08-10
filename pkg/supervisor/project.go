@@ -3,6 +3,7 @@ package supervisor
 import (
 	"fmt"
 
+	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/github"
 	"go.uber.org/zap"
 )
@@ -13,7 +14,11 @@ type ProjectContext struct {
 	TargetRepo    github.Repo
 }
 
-func MakeProjectCtx(rawData map[interface{}]interface{}, logger *zap.Logger) ProjectContext {
+func MakeProjectCtx(configFilePath string, logger *zap.Logger) ProjectContext {
+	rawData, err := utils.ReadYaml(configFilePath)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to read yaml file %s due to error: %s", configFilePath, err))
+	}
 	ctx := ProjectContext{}
 	rawCtx := rawData["context"].(map[interface{}]interface{})
 

@@ -96,23 +96,18 @@ func (sp *RosSupervisor) ReadDockerProject(
 	logger *zap.Logger) {
 
 	projectDir := envConfig.SupervisorProjectPath
-	composeFile := envConfig.SupervisorComposeFile
-	configFile := envConfig.SupervisorConfigFile
+	composeFilePath := envConfig.SupervisorComposeFile
+	configFilePath := envConfig.SupervisorConfigFile
 	hostmachineName := envConfig.HostMachineName
 
-	rawData, err := utils.ReadYaml(configFile)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to read yaml file %s due to error: %s", configFile, err))
-	}
-
 	// If use_git_context then get the latest commit and use it as the build context
-	sp.ProjectCtx = MakeProjectCtx(rawData, logger)
-	projectPath := sp.ProjectCtx.PrepareContextFromGit(projectDir, logger)
-	sp.ProjectPath = projectPath
-	sp.DockerProject = docker.MakeDockerProject(composeFile, projectPath, hostmachineName, envConfig.DevEnv, logger)
+	sp.ProjectCtx = MakeProjectCtx(configFilePath, logger)
+	sp.ProjectPath = sp.ProjectCtx.PrepareContextFromGit(projectDir, logger)
+
+	sp.DockerProject = docker.MakeDockerProject(composeFilePath, sp.ProjectPath, hostmachineName, envConfig.DevEnv, logger)
 	sp.Env = envConfig.DevEnv
 
-	sp.SupervisorServices = MakeServices(rawData, sp.DockerProject, *ctx, sp.GitCli, logger)
+	sp.SupervisorServices = MakeServices(configFilePath, sp.DockerProject, *ctx, sp.GitCli, logger)
 	sp.OrganiseServices()
 }
 

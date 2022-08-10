@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dkhoanguyen/ros-supervisor/internal/utils"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/docker"
 	"github.com/dkhoanguyen/ros-supervisor/pkg/github"
 	gh "github.com/google/go-github/github"
@@ -29,12 +30,16 @@ type Service struct {
 }
 
 func MakeServices(
-	rawData map[interface{}]interface{},
+	configFilePath string,
 	dockerProject *docker.DockerProject,
 	ctx context.Context,
 	githubClient *gh.Client,
 	logger *zap.Logger,
 ) Services {
+	rawData, err := utils.ReadYaml(configFilePath)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to read yaml file %s due to error: %s", configFilePath, err))
+	}
 	supServices := []Service{}
 	services := rawData["services"].(map[interface{}]interface{})
 
