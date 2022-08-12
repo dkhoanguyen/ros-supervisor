@@ -1,7 +1,7 @@
 version: "3.0"
 
 services:
-  supervisor: 
+  supervisor_dev: 
     container_name: ros_supervisor
     hostname: ros_supervisor
     build:

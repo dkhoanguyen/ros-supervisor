@@ -15,7 +15,10 @@ type Service struct {
 	NetworkID   string
 	VolumeID    string
 
-	RawData []byte
+	RawDockerData []byte
+	RawConfigData []byte
+
+	ProcessedRawData []byte
 }
 
 func AddService(
@@ -27,8 +30,9 @@ func AddService(
 	result := db.Db.Where(&Service{
 		Name: name,
 	}).FirstOrCreate(&Service{
-		Name:    name,
-		RawData: rawData,
+		Name:          name,
+		Version:       version,
+		RawDockerData: rawData,
 	})
 
 	return result.Error
@@ -48,6 +52,118 @@ func GetServiceByNameAndVersion(
 	}).First(&service)
 
 	return service, result.Error
+}
+
+func UpdateDockerConfig(
+	name string,
+	config []byte,
+	db *Database) error {
+	service := Service{}
+	result := db.Db.Where(&Service{
+		Name: name,
+	}).First(&service)
+	if result.Error != nil {
+		return result.Error
+	}
+	service.RawDockerData = config
+	db.Db.Save(&service)
+	return nil
+}
+
+func UpdateSupervisorConfig(
+	name string,
+	config []byte,
+	db *Database) error {
+	service := Service{}
+	result := db.Db.Where(&Service{
+		Name: name,
+	}).First(&service)
+	if result.Error != nil {
+		return result.Error
+	}
+	service.RawConfigData = config
+	db.Db.Save(&service)
+	return nil
+}
+
+func UpdateServiceRawData(
+	name string,
+	rawData []byte,
+	db *Database) error {
+	service := Service{}
+	result := db.Db.Where(&Service{
+		Name: name,
+	}).First(&service)
+	if result.Error != nil {
+		return result.Error
+	}
+	service.ProcessedRawData = rawData
+	db.Db.Save(&service)
+	return nil
+}
+
+func UpdateServiceNetworkID(
+	name string,
+	networkId string,
+	db *Database) error {
+	service := Service{}
+	result := db.Db.Where(&Service{
+		Name: name,
+	}).First(&service)
+	if result.Error != nil {
+		return result.Error
+	}
+	service.NetworkID = networkId
+	db.Db.Save(&service)
+	return nil
+}
+
+func UpdateServiceVolumeID(
+	name string,
+	volumeId string,
+	db *Database) error {
+	service := Service{}
+	result := db.Db.Where(&Service{
+		Name: name,
+	}).First(&service)
+	if result.Error != nil {
+		return result.Error
+	}
+	service.VolumeID = volumeId
+	db.Db.Save(&service)
+	return nil
+}
+
+func UpdateServiceImageID(
+	name string,
+	imageId string,
+	db *Database) error {
+	service := Service{}
+	result := db.Db.Where(&Service{
+		Name: name,
+	}).First(&service)
+	if result.Error != nil {
+		return result.Error
+	}
+	service.ImageID = imageId
+	db.Db.Save(&service)
+	return nil
+}
+
+func UpdateServiceContainerID(
+	name string,
+	containerId string,
+	db *Database) error {
+	service := Service{}
+	result := db.Db.Where(&Service{
+		Name: name,
+	}).First(&service)
+	if result.Error != nil {
+		return result.Error
+	}
+	service.ContainerID = containerId
+	db.Db.Save(&service)
+	return nil
 }
 
 func DeleteServiceByNameAndVersion(

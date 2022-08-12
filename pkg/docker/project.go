@@ -86,6 +86,7 @@ func MakeDockerProject(
 	projectPath,
 	hostname,
 	environment string,
+	database *db.Database,
 	logger *zap.Logger,
 ) *DockerProject {
 	dp := DockerProject{}
@@ -100,8 +101,6 @@ func MakeDockerProject(
 		logger.Fatal("Unable to extract docker-compose file.")
 	}
 
-	database := db.MakeDatabase("/test.db")
-
 	slicedProjectPath := strings.Split(projectPath, "/")
 
 	dp.Name = slicedProjectPath[len(slicedProjectPath)-2]
@@ -112,17 +111,19 @@ func MakeDockerProject(
 	// Make Services, Volumes, and Networks
 	// Extracting Core and Services
 	logger.Debug("Extracting all services")
+	version := "1.0.0"
 	rawServiceData := rawData["services"].(map[string]interface{})
 	for name, config := range rawServiceData {
 		if name == "core" {
 			logger.Info("Extracting core separately")
 			dp.Core = MakeService(config.(map[string]interface{}),
 				name, projectPath, dp.Hostname, logger)
-			b, err := yaml.Marshal(config)
+			rawConfig, err := yaml.Marshal(config)
 			if err != nil {
 				logger.Error("Unable to marshal core")
 			}
-			db.AddService(dp.Core.Name, "0.0.1", b, &database)
+
+			db.AddService(dp.Core.Name, version, rawConfig, database)
 			continue
 		}
 		dService := MakeService(config.(map[string]interface{}),
@@ -130,11 +131,11 @@ func MakeDockerProject(
 		dp.Services = append(dp.Services, dService)
 
 		logger.Info(fmt.Sprintf("Updating service %s to database", dService.Name))
-		b, err := yaml.Marshal(config)
+		rawConfig, err := yaml.Marshal(config)
 		if err != nil {
 			logger.Error("Unable to marshal service")
 		}
-		db.AddService(dService.Name, "0.0.1", b, &database)
+		db.AddService(dService.Name, version, rawConfig, database)
 	}
 
 	// Extract Network
